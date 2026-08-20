@@ -1,0 +1,50 @@
+# ==========================================================
+# Icom CI-V Configuration (e.g., IC-7300, IC-705, IC-7610)
+# ==========================================================
+[SERIAL]
+PortName = COM5
+BaudRate = 19200
+DataBits = 8
+Parity = None
+StopBits = One
+DtrEnable = True
+RtsEnable = True
+ReadTimeoutMs = 1000
+WriteTimeoutMs = 1000
+
+[PROTOCOL]
+# Type: CIV (Binary frame protocol)
+Type = CIV
+# Icom Rig CI-V Address in Hex (IC-7300 = 94, IC-705 = A2, IC-7610 = 98, ic-7100 = 88)
+CivRigAddress = 94
+# Controller Address (Default PC = E0)
+CivControllerAddress = E0
+
+[COMMANDS]
+# CI-V Command Codes (Hex representation)
+# CMD: 03 (Read Freq), 05 (Set Freq BCD)
+# CMD: 04 (Read Mode), 06 (Set Mode/Filter)
+# CMD: 15 02 (Read S-Meter)
+# CMD: 07 00 (VFO-A), 07 01 (VFO-B)
+# CMD: 12 00 (ANT1), 12 01 (ANT2), 12 02 (ANT3), 12 03 (ANT4)
+VFO_A = 07 00
+VFO_B = 07 01
+ANT_1 = 12 00
+ANT_2 = 12 01
+ANT_3 = 12 02
+ANT_4 = 12 03
+
+[MODES]
+# Name to CI-V Mode Code (Hex)
+LSB     = 00
+USB     = 01
+AM      = 02
+CW      = 03
+RTTY    = 04
+FM      = 05
+CW-R    = 07
+RTTY-R  = 08
+DV      = 17
+DATA-USB = 01 01
+DATA-LSB = 00 01
+DATA-FM  = 05 01

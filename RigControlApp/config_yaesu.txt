@@ -1,0 +1,52 @@
+# ==========================================================
+# Yaesu CAT Configuration (e.g., FT-991A, FT-710, FTDX10/101)
+# ==========================================================
+[SERIAL]
+PortName = COM4
+BaudRate = 38400
+DataBits = 8
+Parity = None
+StopBits = One
+DtrEnable = True
+RtsEnable = True
+ReadTimeoutMs = 1000
+WriteTimeoutMs = 1000
+
+[PROTOCOL]
+Type = ASCII
+Terminator = ;
+# FT-991A / FT-710 uses 9 digits for Hz
+FreqDigits = 9
+
+[COMMANDS]
+FA_GET = FA;
+FA_SET = FA{0:D9};
+FB_GET = FB;
+FB_SET = FB{0:D9};
+MD_GET = MD0;
+MD_SET = MD0{0};
+IF_GET = IF;
+SM_GET = SM0;
+# VFO 切替 (VS0: VFO-A, VS1: VFO-B)
+VFO_A  = VS0;
+VFO_B  = VS1;
+# アンテナ切替 (AN01: ANT1, AN02: ANT2, AN03: ANT3, AN04: ANT4)
+ANT_1  = AN01;
+ANT_2  = AN02;
+ANT_3  = AN03;
+ANT_4  = AN04;
+
+[MODES]
+# Yaesu mode numbers (2 digits in protocol, configured here as key-value)
+LSB      = 1
+USB      = 2
+CW-U     = 3
+FM       = 4
+AM       = 5
+RTTY-LSB = 6
+CW-L     = 7
+DATA-LSB = 8
+DATA-USB = 9
+DATA-FM  = A
+FM-N     = B
+PSK      = C

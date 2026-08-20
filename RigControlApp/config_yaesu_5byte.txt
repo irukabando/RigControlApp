@@ -1,0 +1,37 @@
+﻿# ==========================================================
+# Yaesu 5-Byte Binary CAT Configuration (FT-847 / FT-857 / FT-1000MP 等)
+# ==========================================================
+[SERIAL]
+PortName = COM3
+BaudRate = 4800
+DataBits = 8
+Parity = None
+StopBits = Two
+DtrEnable = True
+RtsEnable = True
+ReadTimeoutMs = 1000
+WriteTimeoutMs = 1000
+
+[PROTOCOL]
+Type = YAESU_5BYTE
+Terminator = None
+FreqDigits = 8
+
+[COMMANDS]
+# VFO 切替 (コマンド No.5: VFOの呼び出し 0x05)
+VFO_A  = 00 00 00 00 05
+VFO_B  = 00 00 00 02 05
+# VFO A<=>B 切替 (コマンド No.21: 0x85)
+VFO_AB = 00 00 00 00 85
+
+[MODES]
+# コマンド No.11: MODE切換 (P1値: 16進数)
+LSB      = 00
+USB      = 01
+CW       = 02
+CW-R     = 03
+AM       = 04
+FM       = 06
+DIG      = 08
+DATA-USB = 08
+PKT      = 0A
