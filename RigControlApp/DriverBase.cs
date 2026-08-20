@@ -12,6 +12,17 @@ namespace RigControlApp
     }
 
     /// <summary>
+    /// Yaesu 無線機のモデル種別
+    /// </summary>
+    public enum YaesuModel
+    {
+        Ft1000,
+        Ft1000Mp,
+        MarkV,
+        MarkVField
+    }
+
+    /// <summary>
     /// 各社無線機（Yaesu, Kenwood, Icom等）の制御ドライバー共通インターフェース
     /// </summary>
     public interface IRigDriver : IDisposable

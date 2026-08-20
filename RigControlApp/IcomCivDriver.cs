@@ -9,6 +9,7 @@ namespace RigControlApp
     /// </summary>
     public class IcomCivDriver : RigDriverBase
     {
+        public override bool SupportsDualVfoRead => true;
         private const byte Preamble = 0xFE;
         private const byte EndByte = 0xFD;
 

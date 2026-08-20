@@ -8,6 +8,7 @@ namespace RigControlApp
     /// </summary>
     public class YaesuBinaryDriver : RigDriverBase
     {
+        public override bool SupportsDualVfoRead => true;
         private long _cachedFreqA = 14074000;
         private long _cachedFreqB = 14074000;
         private string _cachedMode = "USB";
@@ -34,27 +35,72 @@ namespace RigControlApp
                 try
                 {
                     Port!.DiscardInBuffer();
-                    byte[] request = { 0x00, 0x00, 0x00, 0x00, 0xFA };
+
+                    // ステータス要求コマンド: 00 00 00 03 10
+                    byte[] request = { 0x00, 0x00, 0x00, 0x03, 0x10 };
                     Port.Write(request, 0, request.Length);
 
-                    byte[] buf = new byte[5];
+                    byte[] buf = new byte[32];
                     int read = 0;
                     int elapsed = 0;
-                    while (read < 5 && elapsed < 150)
+                    while (read < 32 && elapsed < 200)
                     {
                         if (Port.BytesToRead > 0)
-                            read += Port.Read(buf, read, 5 - read);
+                            read += Port.Read(buf, read, 32 - read);
                         else
                         {
                             Thread.Sleep(10);
                             elapsed += 10;
                         }
                     }
+
+                    if (read == 32)
+                    {
+                        // VFO-A: offset 1, VFO-B: offset 17
+                        _cachedFreqA = DecodeFrequency(buf, 1);
+                        _cachedFreqB = DecodeFrequency(buf, 17);
+                    }
                 }
                 catch { }
 
                 return vfo == VfoType.VfoA ? _cachedFreqA : _cachedFreqB;
             }
+        }
+
+        private long DecodeFrequency(byte[] buf, int offset)
+        {
+            Config.Commands.TryGetValue("YaesuModel", out var model);
+
+            return model switch
+            {
+                // 3バイト バイナリ (buf[1..3] / buf[17..19]) * 10
+                "FT-1000" =>
+                    (((long)buf[offset] << 16) | ((long)buf[offset + 1] << 8) | buf[offset + 2]) * 10L,
+                // 4バイト バイナリ / 1.60
+                "FT-1000MP" =>
+                    (long)Math.Round((((long)buf[offset] << 24) | ((long)buf[offset + 1] << 16) | ((long)buf[offset + 2] << 8) | buf[offset + 3]) / 1.60),
+
+                // 4バイト BCD (リトルエンディアン順)
+                "MarkV" =>
+                    DecodeMarkVBcd(buf, offset),
+
+                // 4バイト バイナリ * 10
+                "MarkVField" =>
+                    (((long)buf[offset] << 24) | ((long)buf[offset + 1] << 16) | ((long)buf[offset + 2] << 8) | buf[offset + 3]) * 10L,
+
+                _ => DecodeMarkVBcd(buf, offset)
+            };
+        }
+
+        private static long DecodeMarkVBcd(byte[] buf, int offset)
+        {
+            long bcd = 0;
+            for (int i = 3; i >= 0; i--)
+            {
+                byte b = buf[offset + i];
+                bcd = bcd * 100 + (((b >> 4) & 0x0F) * 10 + (b & 0x0F));
+            }
+            return bcd * 10;
         }
 
         public override void SetFrequency(VfoType vfo, long freqHz)

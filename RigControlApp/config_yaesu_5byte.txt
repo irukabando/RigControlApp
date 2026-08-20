@@ -19,10 +19,10 @@ FreqDigits = 8
 
 [COMMANDS]
 # VFO 切替 (コマンド No.5: VFOの呼び出し 0x05)
-VFO_A  = 00 00 00 00 05
-VFO_B  = 00 00 00 02 05
-# VFO A<=>B 切替 (コマンド No.21: 0x85)
-VFO_AB = 00 00 00 00 85
+VFO_A  = 00 00 00 00 85
+VFO_B  = 00 00 00 00 85
+# FT-1000, FT-1000MP, MarkV, MarkVField 正確に入力
+YaesuModel = FT-1000MP
 
 [MODES]
 # コマンド No.11: MODE切換 (P1値: 16進数)
