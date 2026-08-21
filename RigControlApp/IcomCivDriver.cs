@@ -5,11 +5,13 @@ using System.Threading;
 namespace RigControlApp
 {
     /// <summary>
-    /// Icom 向け CI-V 通信ドライバー
+    /// Icom CI-V ドライバ
     /// </summary>
     public class IcomCivDriver : RigDriverBase
     {
-        public override bool SupportsDualVfoRead => true;
+        // 単一レシーバー機でのVFO誤認を防ぐため false に設定
+        public override bool SupportsDualVfoRead => false;
+
         private const byte Preamble = 0xFE;
         private const byte EndByte = 0xFD;
 
@@ -19,7 +21,7 @@ namespace RigControlApp
         {
             lock (SyncLock)
             {
-                if (!IsOpen) throw new InvalidOperationException("シリアルポートが開いていません。");
+                if (!IsOpen) throw new InvalidOperationException("ポートが開いていません。");
 
                 Port!.DiscardInBuffer();
 
@@ -111,7 +113,7 @@ namespace RigControlApp
         {
             if (!Config.ModeMap.TryGetValue(modeName, out var codeHex))
             {
-                throw new ArgumentException($"未定義のモード名です: {modeName}");
+                throw new ArgumentException($"未定義のモード: {modeName}");
             }
 
             byte modeByte = Convert.ToByte(codeHex, 16);
@@ -124,6 +126,19 @@ namespace RigControlApp
             string defaultHex = vfo == VfoType.VfoA ? "07 00" : "07 01";
             string hexCmd = Config.Commands.GetValueOrDefault(key, defaultHex);
             SendRawCommand(hexCmd);
+        }
+
+        // 新設: CI-V バンド切替コマンド (08 xx) の送信
+        public override void SelectBand(string bandKey)
+        {
+            if (Config.Bands.TryGetValue(bandKey, out var cmd) && !string.IsNullOrEmpty(cmd))
+            {
+                SendRawCommand(cmd);
+            }
+            else
+            {
+                throw new ArgumentException($"未設定のバンドコマンド: {bandKey}");
+            }
         }
 
         public override void SetPtt(bool txOn)

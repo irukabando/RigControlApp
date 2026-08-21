@@ -32,6 +32,8 @@ namespace RigControlApp
 
         public Dictionary<string, string> Commands { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> ModeMap { get; } = new(StringComparer.OrdinalIgnoreCase);
+        // 新設: バンド名とバンド切替コマンドの対応マップ
+        public Dictionary<string, string> Bands { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         public static RigConfig LoadFromFile(string filePath)
         {
@@ -74,6 +76,9 @@ namespace RigControlApp
                         break;
                     case "MODES":
                         config.ModeMap[key] = val;
+                        break;
+                    case "BANDS": // 新規追加: BANDS セクションのパース
+                        config.Bands[key] = val;
                         break;
                 }
             }

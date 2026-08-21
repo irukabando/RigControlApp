@@ -12,7 +12,7 @@ namespace RigControlApp
     }
 
     /// <summary>
-    /// Yaesu 無線機のモデル種別
+    /// Yaesu モデル定義
     /// </summary>
     public enum YaesuModel
     {
@@ -23,7 +23,7 @@ namespace RigControlApp
     }
 
     /// <summary>
-    /// 各社無線機（Yaesu, Kenwood, Icom等）の制御ドライバー共通インターフェース
+    /// 共通リグ制御インターフェース (Yaesu, Kenwood, Icom)
     /// </summary>
     public interface IRigDriver : IDisposable
     {
@@ -31,26 +31,22 @@ namespace RigControlApp
         void Close();
         bool IsOpen { get; }
         bool SupportsDualVfoRead { get; }
-
         long GetFrequency(VfoType vfo);
         void SetFrequency(VfoType vfo, long freqHz);
-
         string GetMode();
         void SetMode(string modeName);
-
         void SelectVfo(VfoType vfo);
+        void SelectBand(string bandKey); // 新設: バンド選択コマンド実行
         void SetPtt(bool txOn);
-
         string GetRigState();
         int GetSMeter();
         int GetAfGain();
         void SetAfGain(int gainValue);
-
         string SendRawCommand(string rawInput);
     }
 
     /// <summary>
-    /// 各ドライバー共通のシリアルポート管理および排他制御基底クラス
+    /// リグドライバ基底クラス
     /// </summary>
     public abstract class RigDriverBase : IRigDriver
     {
@@ -131,6 +127,7 @@ namespace RigControlApp
         public abstract string GetMode();
         public abstract void SetMode(string modeName);
         public abstract void SelectVfo(VfoType vfo);
+        public abstract void SelectBand(string bandKey); // 新設: バンド選択
         public abstract void SetPtt(bool txOn);
         public abstract string GetRigState();
         public abstract int GetSMeter();
@@ -140,7 +137,7 @@ namespace RigControlApp
     }
 
     /// <summary>
-    /// プロトコル種別に応じたドライバー生成ファクトリ
+    /// リグドライバファクトリ
     /// </summary>
     public static class RigDriverFactory
     {
@@ -151,7 +148,7 @@ namespace RigControlApp
                 ProtocolType.Civ => new IcomCivDriver(config),
                 ProtocolType.YaesuBinary => new YaesuBinaryDriver(config),
                 ProtocolType.Ascii => new AsciiCatDriver(config),
-                _ => throw new NotSupportedException($"未対応のプロトコルです: {config.Protocol}")
+                _ => throw new NotSupportedException($"未対応プロトコル: {config.Protocol}")
             };
         }
     }

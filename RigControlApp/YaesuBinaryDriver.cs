@@ -4,11 +4,12 @@ using System.Threading;
 namespace RigControlApp
 {
     /// <summary>
-    /// 八重洲無線 5バイト固定長バイナリ CAT プロトコルドライバー
+    /// Yaesu 5-Byte Binary CAT ドライバ
     /// </summary>
     public class YaesuBinaryDriver : RigDriverBase
     {
         public override bool SupportsDualVfoRead => true;
+
         private long _cachedFreqA = 14074000;
         private long _cachedFreqB = 14074000;
         private string _cachedMode = "USB";
@@ -19,7 +20,8 @@ namespace RigControlApp
         {
             lock (SyncLock)
             {
-                if (!IsOpen) throw new InvalidOperationException("シリアルポートが開いていません。");
+                if (!IsOpen) throw new InvalidOperationException("ポートが開いていません。");
+
                 byte[] packet = { p4, p3, p2, p1, cmd };
                 Port!.Write(packet, 0, packet.Length);
                 Thread.Sleep(30);
@@ -35,14 +37,14 @@ namespace RigControlApp
                 try
                 {
                     Port!.DiscardInBuffer();
-
-                    // ステータス要求コマンド: 00 00 00 03 10
+                    // ステータス要求: 00 00 00 03 10
                     byte[] request = { 0x00, 0x00, 0x00, 0x03, 0x10 };
                     Port.Write(request, 0, request.Length);
 
                     byte[] buf = new byte[32];
                     int read = 0;
                     int elapsed = 0;
+
                     while (read < 32 && elapsed < 200)
                     {
                         if (Port.BytesToRead > 0)
@@ -73,18 +75,19 @@ namespace RigControlApp
 
             return model switch
             {
-                // 3バイト バイナリ (buf[1..3] / buf[17..19]) * 10
+                // 3バイト (buf[1..3] / buf[17..19]) * 10
                 "FT-1000" =>
                     (((long)buf[offset] << 16) | ((long)buf[offset + 1] << 8) | buf[offset + 2]) * 10L,
-                // 4バイト バイナリ / 1.60
+
+                // 4バイト / 1.60
                 "FT-1000MP" =>
                     (long)Math.Round((((long)buf[offset] << 24) | ((long)buf[offset + 1] << 16) | ((long)buf[offset + 2] << 8) | buf[offset + 3]) / 1.60),
 
-                // 4バイト BCD (リトルエンディアン順)
+                // 4バイト BCD (下位桁から順にパック)
                 "MarkV" =>
                     DecodeMarkVBcd(buf, offset),
 
-                // 4バイト バイナリ * 10
+                // 4バイト * 10
                 "MarkVField" =>
                     (((long)buf[offset] << 24) | ((long)buf[offset + 1] << 16) | ((long)buf[offset + 2] << 8) | buf[offset + 3]) * 10L,
 
@@ -109,12 +112,12 @@ namespace RigControlApp
             if (vfo == VfoType.VfoA)
             {
                 _cachedFreqA = freqHz;
-                SendCommand(p4, p3, p2, p1, 0x0A); // VFO-A 周波数設定
+                SendCommand(p4, p3, p2, p1, 0x0A); // VFO-A 設定
             }
             else
             {
                 _cachedFreqB = freqHz;
-                SendCommand(p4, p3, p2, p1, 0x8A); // VFO-B 周波数設定
+                SendCommand(p4, p3, p2, p1, 0x8A); // VFO-B 設定
             }
         }
 
@@ -152,9 +155,18 @@ namespace RigControlApp
         public override void SelectVfo(VfoType vfo)
         {
             string key = vfo == VfoType.VfoA ? "VFO_A" : "VFO_B";
-            string defaultHex = vfo == VfoType.VfoA ? "00 00 00 00 05" : "00 00 00 02 05";
+            string defaultHex = vfo == VfoType.VfoA ? "00 00 00 00 05" : "00 00 00 01 05";
             string hexCmd = Config.Commands.GetValueOrDefault(key, defaultHex);
             SendRawCommand(hexCmd);
+        }
+
+        // 新設: バンド選択コマンドの送信
+        public override void SelectBand(string bandKey)
+        {
+            if (Config.Bands.TryGetValue(bandKey, out var cmd) && !string.IsNullOrEmpty(cmd))
+            {
+                SendRawCommand(cmd);
+            }
         }
 
         public override void SetPtt(bool txOn)
@@ -170,6 +182,7 @@ namespace RigControlApp
             lock (SyncLock)
             {
                 if (!IsOpen) return 0;
+
                 try
                 {
                     Port!.DiscardInBuffer();
@@ -179,6 +192,7 @@ namespace RigControlApp
                     byte[] buf = new byte[5];
                     int read = 0;
                     int elapsed = 0;
+
                     while (read < 5 && elapsed < 100)
                     {
                         if (Port.BytesToRead > 0)
@@ -193,20 +207,23 @@ namespace RigControlApp
                     if (read >= 1) return buf[0];
                 }
                 catch { }
+
                 return 0;
             }
         }
 
         public override int GetAfGain() => 0;
+
         public override void SetAfGain(int gainValue) { }
 
         public override string SendRawCommand(string raw)
         {
             lock (SyncLock)
             {
-                if (!IsOpen) throw new InvalidOperationException("シリアルポートが開いていません。");
+                if (!IsOpen) throw new InvalidOperationException("ポートが開いていません。");
+
                 string[] hexParts = raw.Split(new[] { ' ', ',', ';', '-' }, StringSplitOptions.RemoveEmptyEntries);
-                if (hexParts.Length != 5) return "エラー: 5バイトのHEXを指定してください";
+                if (hexParts.Length != 5) return "Invalid 5-Byte format";
 
                 byte[] bytes = new byte[5];
                 for (int i = 0; i < 5; i++)
@@ -223,10 +240,12 @@ namespace RigControlApp
         {
             long val = freqHz / 10;
             string s = val.ToString("D8");
+
             byte p1 = (byte)(((s[0] - '0') << 4) | (s[1] - '0'));
             byte p2 = (byte)(((s[2] - '0') << 4) | (s[3] - '0'));
             byte p3 = (byte)(((s[4] - '0') << 4) | (s[5] - '0'));
             byte p4 = (byte)(((s[6] - '0') << 4) | (s[7] - '0'));
+
             return (p1, p2, p3, p4);
         }
     }

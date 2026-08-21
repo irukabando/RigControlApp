@@ -6,7 +6,7 @@ using System.Threading;
 namespace RigControlApp
 {
     /// <summary>
-    /// Kenwood & Yaesu(ASCII) 向け CAT 制御ドライバー
+    /// Kenwood & Yaesu(ASCII) CAT ドライバ
     /// </summary>
     public class AsciiCatDriver : RigDriverBase
     {
@@ -18,7 +18,7 @@ namespace RigControlApp
         {
             lock (SyncLock)
             {
-                if (!IsOpen) throw new InvalidOperationException("シリアルポートが開いていません。");
+                if (!IsOpen) throw new InvalidOperationException("ポートが開いていません。");
 
                 Port!.DiscardInBuffer();
                 Port.Write(cmd);
@@ -76,7 +76,6 @@ namespace RigControlApp
         {
             string cmd = Config.Commands.GetValueOrDefault("MD_GET", "MD;");
             string resp = ExecuteCommand(cmd).TrimEnd(Config.Terminator);
-
             string code = resp.StartsWith("MD", StringComparison.OrdinalIgnoreCase) ? resp[2..] : resp;
 
             foreach (var kvp in Config.ModeMap)
@@ -87,6 +86,7 @@ namespace RigControlApp
                     return kvp.Key;
                 }
             }
+
             return string.IsNullOrEmpty(code) ? "Unknown" : $"Code: {code}";
         }
 
@@ -94,7 +94,7 @@ namespace RigControlApp
         {
             if (!Config.ModeMap.TryGetValue(modeName, out var code))
             {
-                throw new ArgumentException($"未定義のモード名です: {modeName}");
+                throw new ArgumentException($"未定義のモード: {modeName}");
             }
 
             string tmpl = Config.Commands.GetValueOrDefault("MD_SET", "MD{0};");
@@ -108,6 +108,19 @@ namespace RigControlApp
             string defaultCmd = vfo == VfoType.VfoA ? "VS0;" : "VS1;";
             string cmd = Config.Commands.GetValueOrDefault(key, defaultCmd);
             ExecuteCommand(cmd, expectResponse: false);
+        }
+
+        // 新設: バンド選択コマンドの送信
+        public override void SelectBand(string bandKey)
+        {
+            if (Config.Bands.TryGetValue(bandKey, out var cmd) && !string.IsNullOrEmpty(cmd))
+            {
+                ExecuteCommand(cmd, expectResponse: false);
+            }
+            else
+            {
+                throw new ArgumentException($"未設定のバンドコマンド: {bandKey}");
+            }
         }
 
         public override void SetPtt(bool txOn)
@@ -157,7 +170,6 @@ namespace RigControlApp
         {
             if (!rawInput.EndsWith(Config.Terminator.ToString()))
                 rawInput += Config.Terminator;
-
             return ExecuteCommand(rawInput);
         }
 

@@ -9,33 +9,29 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-	  <Compile Remove="Program.cs" />
+		<Compile Remove="Program.cs" />
 	</ItemGroup>
 
 	<ItemGroup>
-		<None Include="RigControlApp.csproj" />
+		<PackageReference Include="System.IO.Ports" Version="10.0.11" />
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="System.IO.Ports" Version="10.0.11" />
+		<None Update="config.ini">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="config_kenwood.ini">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="config_yaesu.ini">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="config_icom.ini">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+		<None Update="config_yaesu_5byte.ini">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 	</ItemGroup>
 
-	<ItemGroup>
-		<None Update="config.txt">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="config_kenwood.txt">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="config_yaesu.txt">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="config_icom.txt">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-		<None Update="config_yaesu_5byte.txt">
-			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-		</None>
-	</ItemGroup>
-	
 </Project>
