@@ -51,9 +51,42 @@ namespace RigControlApp
         /// </summary>
         public static RigConfig LoadFromFile(string filePath)
         {
+            // 指定されたパスに直接存在しない場合のパス・拡張子自動探索ロジック
             if (!File.Exists(filePath))
             {
-                throw new FileNotFoundException($"設定ファイルが見つかりません: {filePath}");
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string fileNameOnly = Path.GetFileName(filePath);
+                string fileNameWithoutExt = Path.GetFileNameWithoutExtension(filePath);
+                string withExt = filePath.EndsWith(".ini", StringComparison.OrdinalIgnoreCase) ? filePath : filePath + ".ini";
+
+                string[] candidates = new[]
+                {
+                    withExt,
+                    Path.Combine(baseDir, filePath),
+                    Path.Combine(baseDir, withExt),
+                    Path.Combine(baseDir, "config", fileNameOnly),
+                    Path.Combine(baseDir, "config", fileNameWithoutExt + ".ini"),
+                    Path.Combine("config", fileNameOnly),
+                    Path.Combine("config", fileNameWithoutExt + ".ini"),
+                    Path.Combine(baseDir, "config.ini"),
+                    Path.Combine(baseDir, "config", "config.ini")
+                };
+
+                bool found = false;
+                foreach (var cand in candidates)
+                {
+                    if (File.Exists(cand))
+                    {
+                        filePath = cand;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found)
+                {
+                    throw new FileNotFoundException($"設定ファイルが見つかりません: {filePath}\n探索先: {baseDir}");
+                }
             }
 
             var config = new RigConfig();

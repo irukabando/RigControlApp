@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.IO;
 using System.IO.Ports;
 using System.Threading.Tasks;
@@ -53,13 +54,33 @@ namespace RigControlApp
             CmbPort.ItemsSource = SerialPort.GetPortNames();
             if (CmbPort.Items.Count > 0) CmbPort.SelectedIndex = 0;
 
-            // 実行ディレクトリおよび config/ フォルダ内の .ini ファイルを列挙
-            var configs = Directory.GetFiles(".", "*.ini", SearchOption.AllDirectories);
-            foreach (var f in configs)
+            // 実行ベースディレクトリおよびカレントディレクトリから .ini ファイルを網羅的に列挙
+            CmbConfig.Items.Clear();
+            var searchPaths = new List<string> { AppDomain.CurrentDomain.BaseDirectory, "." };
+            var foundFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var path in searchPaths)
             {
-                string fileName = Path.GetFileNameWithoutExtension(f);
-                CmbConfig.Items.Add(fileName);
+                if (Directory.Exists(path))
+                {
+                    try
+                    {
+                        var files = Directory.GetFiles(path, "*.ini", SearchOption.AllDirectories);
+                        foreach (var f in files)
+                        {
+                            string fullPath = Path.GetFullPath(f);
+                            if (foundFiles.Add(fullPath))
+                            {
+                                string fileName = Path.GetFileNameWithoutExtension(f);
+                                // 表示名は拡張子なし、Tagに実体フルパスを保持
+                                CmbConfig.Items.Add(new ComboBoxItem { Content = fileName, Tag = fullPath });
+                            }
+                        }
+                    }
+                    catch { }
+                }
             }
+
             if (CmbConfig.Items.Count > 0) CmbConfig.SelectedIndex = 0;
 
             _pollTimer.Interval = TimeSpan.FromMilliseconds(_config.PollIntervalMs);
@@ -118,7 +139,17 @@ namespace RigControlApp
 
             try
             {
-                string configFile = CmbConfig.SelectedItem?.ToString() ?? "config.ini";
+                // ComboBoxItem の Tag からフルパスを確実に取得
+                string configFile = "config.ini";
+                if (CmbConfig.SelectedItem is ComboBoxItem item && item.Tag != null)
+                {
+                    configFile = item.Tag.ToString()!;
+                }
+                else if (CmbConfig.SelectedItem != null)
+                {
+                    configFile = CmbConfig.SelectedItem.ToString()!;
+                }
+
                 _config = RigConfig.LoadFromFile(configFile);
 
                 if (CmbPort.SelectedItem != null)
