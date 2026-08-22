@@ -42,7 +42,7 @@ namespace RigControlApp
             if (CmbPort.Items.Count > 0) CmbPort.SelectedIndex = 0;
 
             // .ini ファイルの探索
-            var configs = Directory.GetFiles(".", "config*.ini");
+            var configs = Directory.GetFiles(".", "*.ini");
             foreach (var f in configs) CmbConfig.Items.Add(Path.GetFileName(f));
             if (CmbConfig.Items.Count > 0) CmbConfig.SelectedIndex = 0;
 

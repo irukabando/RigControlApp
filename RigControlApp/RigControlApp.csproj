@@ -17,19 +17,19 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<None Update="config.ini">
+		<None Update="config\config.ini">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
-		<None Update="config_kenwood.ini">
+		<None Update="config\kenwood.ini">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
-		<None Update="config_yaesu.ini">
+		<None Update="config\yaesu.ini">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
-		<None Update="config_icom.ini">
+		<None Update="config\icom.ini">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
-		<None Update="config_yaesu_5byte.ini">
+		<None Update="config\yaesu_5byte.ini">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 	</ItemGroup>
