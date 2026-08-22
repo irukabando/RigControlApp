@@ -50,51 +50,15 @@ PCとリグ間の物理通信パラメータを定義します。
 
 | キー名 | 設定例 | 設定基準 | 影響 |
 | --- | --- | --- | --- |
-| **PortName** | `COM3` | デバイスマネージャーで確認したCOMポート番号
-
- | 接続先シリアルポート
-
- |
-| **BaudRate** | `38400` | リグ本体のCAT/CI-V速度設定値と一致させる
-
- | 不一致時は通信不能
-
- |
-| **DataBits** | `8` | 通常は `8` を指定
-
- | データフレーム長
-
- |
-| **Parity** | `None` | 通常は `None`（なし）を指定
-
- | パリティ検査ビット
-
- |
-| **StopBits** | `One` | 通常 `One`、FT-1000等の旧機は `Two` を指定
-
- | ストップビット長
-
- |
-| **DtrEnable** | `True` | 仮想COMポートの制御線電源（通常 `True`）
-
- | CATインターフェースの起動・電源
-
- |
-| **RtsEnable** | `True` | ハードウェアフロー・制御線電源（通常 `True`）
-
- | 送信制御やインターフェース給電
-
- |
-| **ReadTimeoutMs** | `1000` | 応答待機の上限ミリ秒（標準 `1000`）
-
- | 通信切断・無応答時のタイムアウト判定
-
- |
-| **WriteTimeoutMs** | `1000` | 送信完了の上限ミリ秒（標準 `1000`）
-
- | ポート詰まり時のタイムアウト判定
-
- |
+| **PortName** | `COM3` | デバイスマネージャーで確認したCOMポート番号 | 接続先シリアルポート |
+| **BaudRate** | `38400` | リグ本体のCAT/CI-V速度設定値と一致させる| 不一致時は通信不能 |
+| **DataBits** | `8` | 通常は `8` を指定 | データフレーム長 |
+| **Parity** | `None` | 通常は `None`（なし）を指定 | パリティ検査ビット |
+| **StopBits** | `One` | 通常 `One`、FT-1000等の旧機は `Two` を指定 | ストップビット長 |
+| **DtrEnable** | `True` | 仮想COMポートの制御線電源（通常 `True`） | CATインターフェースの起動・電源 |
+| **RtsEnable** | `True` | ハードウェアフロー・制御線電源（通常 `True`） | 送信制御やインターフェース給電 |
+| **ReadTimeoutMs** | `1000` | 応答待機の上限ミリ秒（標準 `1000`） | 通信切断・無応答時のタイムアウト判定 |
+| **WriteTimeoutMs** | `1000` | 送信完了の上限ミリ秒（標準 `1000`） | ポート詰まり時のタイムアウト判定 |
 
 ---
 
@@ -104,36 +68,12 @@ PCとリグ間の物理通信パラメータを定義します。
 
 | キー名 | 設定値 | 設定基準 | 影響 |
 | --- | --- | --- | --- |
-| **Type** | `ASCII`, `CIV`, `YaesuBinary` | リグのメーカー・世代に合わせて指定
-
- | 使用する通信ドライバーの切り替え
-
- |
-| **Terminator** | `;` | ASCIIコマンド末尾の終端文字（標準は `;`）
-
- | コマンド区切りの認識
-
- |
-| **FreqDigits** | `11`, `9` | 周波数コマンドの桁数（Kenwood=11, Yaesu=9）
-
- | 周波数送信時のゼロ埋め桁数
-
- |
-| **CivRigAddress** | `94`, `A4` | Icom機のCI-Vアドレス（16進数表記）
-
- | Icom機側のパケット受信判定
-
- |
-| **CivControllerAddress** | `E0` | PC側のCI-Vアドレス（通常 `E0`）
-
- | リグからの応答先アドレス
-
- |
-| **PollIntervalMs** | `500` | 状態取得の監視周期ミリ秒（最小推奨: 50）
-
- | UI表示の追従速度とPC負荷のバランス
-
- |
+| **Type** | `ASCII`, `CIV`, `YaesuBinary` | リグのメーカー・世代に合わせて指定 | 使用する通信ドライバーの切り替え |
+| **Terminator** | `;` | ASCIIコマンド末尾の終端文字（標準は `;`） | コマンド区切りの認識 |
+| **FreqDigits** | `11`, `9` | 周波数コマンドの桁数（Kenwood=11, Yaesu=9） | 周波数送信時のゼロ埋め桁数 |
+| **CivRigAddress** | `94`, `A4` | Icom機のCI-Vアドレス（16進数表記） | Icom機側のパケット受信判定 |
+| **CivControllerAddress** | `E0` | PC側のCI-Vアドレス（通常 `E0`） | リグからの応答先アドレス |
+| **PollIntervalMs** | `500` | 状態取得の監視周期ミリ秒（最小推奨: 50） | UI表示の追従速度とPC負荷のバランス |
 
 * **Type の選択基準**:
 * `ASCII`: Kenwood機全般、Yaesu新世代機（FT-991A, FT-710, FTDX10 等）。
@@ -164,42 +104,18 @@ PCとリグ間の物理通信パラメータを定義します。
 
 | コマンドキー | 内容・用途 | 記述形式の例 |
 | --- | --- | --- |
-| **FA_GET / FB_GET** | VFO-A / B 周波数取得
-
- | ASCII: `FA;` / CIV: `03`<br> |
-| **FA_SET / FB_SET** | VFO-A / B 周波数設定
-
- | ASCII: `FA{0:D9};` / CIV: `05`<br> |
-| **VFO_A / VFO_B** | アクティブVFOの選択
-
- | ASCII: `VS0;` / CIV: `07 00`<br> |
-| **MD_GET_A / MD_GET_B** | モードの取得
-
- | ASCII: `MD0;` / CIV: `04`<br> |
-| **MD_SET_A / MD_SET_B** | モードの設定（`{0}` にモードコード代入）
-
- | ASCII: `MD0{0};` / CIV: `06 {0} 01`<br> |
-| **ANT_SET_A / ANT_SET_B** | アンテナ端子切替（`{0}` にアンテナコード代入）
-
- | ASCII: `AN0{0};` / CIV: `12 0{0}`<br> |
-| **BAND_SET_A / BAND_SET_B** | バンド切替テンプレート
-
- | 独自: `BS{0};` / 周波数: `FA{0:D11};`<br> |
-| **TX_ON / TX_OFF** | 送信開始(PTT ON) / 受信復帰(PTT OFF)
-
- | ASCII: `TX1;` / CIV: `1C 00 01`<br> |
-| **SM_GET** | Sメーター値の取得
-
- | ASCII: `SM0;` / CIV: `15 02`<br> |
-| **AG_GET / AG_SET** | AFゲイン（音量）の取得・設定
-
- | ASCII: `AG0;`, `AG0{0:D3};`<br> |
-| **IF_GET** | リグ全般状態の一括取得
-
- | ASCII: `IF;`<br> |
-| **YaesuModel** | YaesuBinary専用モデル識別（`MarkV`, `FT-1000`等）
-
- | 文字列: `MarkV`<br> |
+| **FA_GET / FB_GET** | VFO-A / B 周波数取得 | ASCII: `FA;` / CIV: `03`<br> |
+| **FA_SET / FB_SET** | VFO-A / B 周波数設定 | ASCII: `FA{0:D9};` / CIV: `05`<br> |
+| **VFO_A / VFO_B** | アクティブVFOの選択 | ASCII: `VS0;` / CIV: `07 00`<br> |
+| **MD_GET_A / MD_GET_B** | モードの取得 | ASCII: `MD0;` / CIV: `04`<br> |
+| **MD_SET_A / MD_SET_B** | モードの設定（`{0}` にモードコード代入） | ASCII: `MD0{0};` / CIV: `06 {0} 01`<br> |
+| **ANT_SET_A / ANT_SET_B** | アンテナ端子切替（`{0}` にアンテナコード代入） | ASCII: `AN0{0};` / CIV: `12 0{0}`<br> |
+| **BAND_SET_A / BAND_SET_B** | バンド切替テンプレート | 独自: `BS{0};` / 周波数: `FA{0:D11};`<br> |
+| **TX_ON / TX_OFF** | 送信開始(PTT ON) / 受信復帰(PTT OFF) | ASCII: `TX1;` / CIV: `1C 00 01`<br> |
+| **SM_GET** | Sメーター値の取得 | ASCII: `SM0;` / CIV: `15 02`<br> |
+| **AG_GET / AG_SET** | AFゲイン（音量）の取得・設定 | ASCII: `AG0;`, `AG0{0:D3};`<br> |
+| **IF_GET** | リグ全般状態の一括取得 | ASCII: `IF;`<br> |
+| **YaesuModel** | YaesuBinary専用モデル識別（`MarkV`, `FT-1000`等） | 文字列: `MarkV`<br> |
 
 ---
 
