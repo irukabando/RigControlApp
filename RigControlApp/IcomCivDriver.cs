@@ -5,11 +5,10 @@ using System.Threading;
 namespace RigControlApp
 {
     /// <summary>
-    /// Icom CI-V ドライバ
+    /// Icom CI-V バイナリプロトコル向けドライバー
     /// </summary>
     public class IcomCivDriver : RigDriverBase
     {
-        // 単一レシーバー機でのVFO誤認を防ぐため false に設定
         public override bool SupportsDualVfoRead => false;
 
         private const byte Preamble = 0xFE;
@@ -17,12 +16,14 @@ namespace RigControlApp
 
         public IcomCivDriver(RigConfig config) : base(config) { }
 
+        /// <summary>
+        /// CI-V フレームを送信 (FE FE [RigAddr] [CtrlAddr] [Payload...] FD)
+        /// </summary>
         private List<byte> SendFrame(byte[] payload, bool expectReply = true)
         {
             lock (SyncLock)
             {
-                if (!IsOpen) throw new InvalidOperationException("ポートが開いていません。");
-
+                EnsureOpen();
                 Port!.DiscardInBuffer();
 
                 var frame = new List<byte> { Preamble, Preamble, Config.CivRigAddress, Config.CivControllerAddress };
@@ -85,7 +86,7 @@ namespace RigControlApp
             SendFrame(payload, expectReply: false);
         }
 
-        public override string GetMode()
+        public override string GetMode(VfoType vfo)
         {
             var reply = SendFrame(new byte[] { 0x04 });
             if (reply.Count >= 6)
@@ -109,15 +110,16 @@ namespace RigControlApp
             return "Unknown";
         }
 
-        public override void SetMode(string modeName)
+        public override void SetMode(VfoType vfo, string modeName)
         {
-            if (!Config.ModeMap.TryGetValue(modeName, out var codeHex))
+            if (Config.ModeMap.TryGetValue(modeName, out var codeHex))
             {
-                throw new ArgumentException($"未定義のモード: {modeName}");
+                string key = vfo == VfoType.VfoA ? "MD_SET_A" : "MD_SET_B";
+                string defaultHex = "06 {0} 01";
+                string tmpl = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("MD_SET", defaultHex));
+                string formatted = string.Format(tmpl, codeHex);
+                SendRawCommand(formatted);
             }
-
-            byte modeByte = Convert.ToByte(codeHex, 16);
-            SendFrame(new byte[] { 0x06, modeByte, 0x01 }, expectReply: false);
         }
 
         public override void SelectVfo(VfoType vfo)
@@ -128,17 +130,35 @@ namespace RigControlApp
             SendRawCommand(hexCmd);
         }
 
-        // 新設: CI-V バンド切替コマンド (08 xx) の送信
-        public override void SelectBand(string bandKey)
+        public override void SelectBand(VfoType vfo, string bandKey)
         {
-            if (Config.Bands.TryGetValue(bandKey, out var cmd) && !string.IsNullOrEmpty(cmd))
+            if (Config.Bands.TryGetValue(bandKey, out var bandVal))
             {
-                SendRawCommand(cmd);
+                string key = vfo == VfoType.VfoA ? "BAND_SET_A" : "BAND_SET_B";
+                string tmpl = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("BAND_SET", "01 {0}"));
+
+                if (!string.IsNullOrEmpty(tmpl))
+                {
+                    // CI-V の独自バンド選択コマンド (01 [BandCode]) を送信
+                    SendRawCommand(string.Format(tmpl, bandVal));
+                }
+                else if (long.TryParse(bandVal, out long freqHz))
+                {
+                    SetFrequency(vfo, freqHz);
+                }
+                else
+                {
+                    SendRawCommand(bandVal);
+                }
             }
-            else
-            {
-                throw new ArgumentException($"未設定のバンドコマンド: {bandKey}");
-            }
+        }
+
+        public override void SetAntenna(VfoType vfo, string antennaIndex)
+        {
+            string antCode = Config.Antennas.GetValueOrDefault(antennaIndex, antennaIndex);
+            string key = vfo == VfoType.VfoA ? "ANT_SET_A" : "ANT_SET_B";
+            string tmpl = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("ANT_SET", "12 0{0}"));
+            SendRawCommand(string.Format(tmpl, antCode));
         }
 
         public override void SetPtt(bool txOn)
@@ -150,7 +170,7 @@ namespace RigControlApp
         public override string GetRigState()
         {
             long freq = GetFrequency(VfoType.VfoA);
-            string mode = GetMode();
+            string mode = GetMode(VfoType.VfoA);
             return $"[CI-V State] Freq: {freq:N0} Hz, Mode: {mode}";
         }
 

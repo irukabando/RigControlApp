@@ -6,7 +6,6 @@
         FontFamily="Segoe UI, Yu Gothic UI, Meiryo"
         WindowStartupLocation="CenterScreen">
 
-    <!-- グローバルスタイル定義 -->
     <Window.Resources>
         <Style TargetType="TextBlock">
             <Setter Property="Foreground" Value="#475569"/>
@@ -50,16 +49,16 @@
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <!-- 1. 接続ヘッダー -->
+            <!-- 1. 接続バー -->
             <RowDefinition Height="Auto"/>
-            <!-- 2. 周波数・Sメーター表示部 -->
+            <!-- 2. ディスプレイ表示 -->
             <RowDefinition Height="Auto"/>
-            <!-- 3. コントロール群 (バンド・モード / VFO・ANT) -->
+            <!-- 3. コントロール (バンド/モード/VFO/ANT) -->
             <RowDefinition Height="*"/>
-            <!-- 4. ログ領域 -->
+            <!-- 4. ログ出力エリア -->
         </Grid.RowDefinitions>
 
-        <!-- 1. 接続ヘッダー -->
+        <!-- 1. 接続バー -->
         <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,0,10">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock Text="設定:" VerticalAlignment="Center" Margin="0,0,6,0"/>
@@ -69,13 +68,12 @@
                 <ComboBox x:Name="CmbPort" Width="85" Height="28" Margin="0,0,14,0"/>
 
                 <Button x:Name="BtnConnect" Content="接続" Width="75" Height="28" Background="#0284C7" Foreground="#FFFFFF" BorderBrush="#0284C7" Click="BtnConnect_Click"/>
-
                 <Ellipse x:Name="LedStatus" Width="10" Height="10" Fill="#94A3B8" Margin="16,0,0,0" VerticalAlignment="Center"/>
                 <TextBlock x:Name="TxtStatus" Text="未接続" VerticalAlignment="Center" Margin="6,0,0,0" Foreground="#64748B" FontWeight="SemiBold"/>
             </StackPanel>
         </Border>
 
-        <!-- 2. 周波数・Sメーター表示部 -->
+        <!-- 2. ディスプレイ表示 -->
         <Border Grid.Row="1" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="16,12" Margin="0,0,0,10">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -83,16 +81,16 @@
                     <ColumnDefinition Width="220"/>
                 </Grid.ColumnDefinitions>
 
-                <!-- メイン周波数表示 -->
+                <!-- 周波数表示 -->
                 <StackPanel Grid.Column="0">
                     <TextBlock x:Name="TxtVfoTitle" Text="VFO-A (Hz)" Foreground="#64748B" FontSize="11" FontWeight="SemiBold"/>
 
-                    <!-- 桁選択マーカー (上部▼) -->
+                    <!-- 桁マーカー -->
                     <Canvas Height="14" Margin="0,2,0,0" ClipToBounds="False">
                         <TextBlock x:Name="TxtMarker" Text="▼" Foreground="#0284C7" FontSize="12" FontWeight="Bold" Canvas.Left="0" Canvas.Top="0"/>
                     </Canvas>
 
-                    <!-- 周波数テキスト (桁直接操作) -->
+                    <!-- 周波数メイン表示 -->
                     <TextBox x:Name="TxtFreqMain" Text="014.074.000" FontFamily="Consolas" FontSize="42" FontWeight="Bold"
                              Foreground="#0F172A" Background="Transparent" BorderThickness="0"
                              CaretBrush="Transparent" SelectionBrush="Transparent" IsReadOnly="True" Cursor="Hand"
@@ -101,13 +99,14 @@
                              PreviewMouseDown="TxtFreqMain_PreviewMouseDown"
                              Margin="0,-2,0,0" Padding="0"/>
 
+                    <!-- サブ VFO 表示 -->
                     <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
                         <TextBlock x:Name="TxtSubVfoLabel" Text="SUB VFO: " Foreground="#94A3B8" FontSize="11"/>
                         <TextBlock x:Name="TxtFreqSub" Text="---.---.--- Hz" Foreground="#64748B" FontFamily="Consolas" FontSize="11" FontWeight="SemiBold"/>
                     </StackPanel>
                 </StackPanel>
 
-                <!-- Sメーター表示 -->
+                <!-- Sメーター -->
                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
                     <TextBlock Text="S-METER" Foreground="#64748B" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Right"/>
                     <ProgressBar x:Name="PbSMeter" Height="14" Minimum="0" Maximum="255" Value="0"
@@ -121,19 +120,19 @@
             </Grid>
         </Border>
 
-        <!-- 3. コントロール群 (左: バンド・モード / 右: VFO・ANT) -->
+        <!-- 3. コントロール (バンド/モード/VFO/ANT) -->
         <Grid Grid.Row="2" Margin="0,0,0,10">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="1.35*"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <!-- 左側: バンド選択 & モード切替 -->
+            <!-- バンド＆モード切替 -->
             <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,5,0">
                 <StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-                        <TextBlock Text="バンド:" VerticalAlignment="Center" Margin="0,0,8,0" FontWeight="SemiBold"/>
-                        <!-- Tag に周波数ではなくバンド識別子を設定 -->
+                        <TextBlock Text="BAND:" VerticalAlignment="Center" Margin="0,0,8,0" FontWeight="SemiBold"/>
+                        <!-- Tag を INI の [BANDS] キーと完全一致 -->
                         <ComboBox x:Name="CmbBand" Width="180" Height="28" SelectionChanged="CmbBand_SelectionChanged">
                             <ComboBoxItem Content="1.9 MHz" Tag="1.9MHz"/>
                             <ComboBoxItem Content="3.5 MHz" Tag="3.5MHz"/>
@@ -161,31 +160,31 @@
                 </StackPanel>
             </Border>
 
-            <!-- 右側: VFO 切替 & アンテナ -->
+            <!-- VFO & アンテナ切替 -->
             <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="12" Margin="5,0,0,0">
                 <StackPanel VerticalAlignment="Center">
-                    <!-- VFO 選択ボタン -->
+                    <!-- VFO 選択 -->
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                         <TextBlock Text="VFO:" VerticalAlignment="Center" Margin="0,0,8,0" Width="45" FontWeight="SemiBold"/>
                         <Button x:Name="BtnVfoA" Content="VFO-A" Width="70" Height="28" Margin="0,0,6,0" Background="#0284C7" Foreground="#FFFFFF" BorderBrush="#0284C7" Click="BtnVfoA_Click"/>
                         <Button x:Name="BtnVfoB" Content="VFO-B" Width="70" Height="28" Background="#FFFFFF" Foreground="#334155" BorderBrush="#CBD5E1" Click="BtnVfoB_Click"/>
                     </StackPanel>
 
-                    <!-- アンテナ選択 (ANT 1〜4) -->
+                    <!-- アンテナ選択 (Tag にアンテナ番号そのものを設定) -->
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="ANT:" VerticalAlignment="Center" Margin="0,0,8,0" Width="45" FontWeight="SemiBold"/>
                         <ComboBox x:Name="CmbAntenna" Width="146" Height="28" SelectionChanged="CmbAntenna_SelectionChanged">
-                            <ComboBoxItem Content="ANT 1" Tag="ANT_1"/>
-                            <ComboBoxItem Content="ANT 2" Tag="ANT_2"/>
-                            <ComboBoxItem Content="ANT 3" Tag="ANT_3"/>
-                            <ComboBoxItem Content="ANT 4" Tag="ANT_4"/>
+                            <ComboBoxItem Content="ANT 1" Tag="1"/>
+                            <ComboBoxItem Content="ANT 2" Tag="2"/>
+                            <ComboBoxItem Content="ANT 3" Tag="3"/>
+                            <ComboBoxItem Content="ANT 4" Tag="4"/>
                         </ComboBox>
                     </StackPanel>
                 </StackPanel>
             </Border>
         </Grid>
 
-        <!-- 4. ログ領域 -->
+        <!-- 4. ログ出力エリア -->
         <Border Grid.Row="3" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="1" CornerRadius="6" Padding="2">
             <TextBox x:Name="TxtLog" Background="Transparent" Foreground="#334155" BorderThickness="0"
                      FontFamily="Consolas" FontSize="11" IsReadOnly="True" VerticalScrollBarVisibility="Auto" Padding="6"/>

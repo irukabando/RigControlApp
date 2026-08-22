@@ -4,7 +4,7 @@ using System.Threading;
 namespace RigControlApp
 {
     /// <summary>
-    /// Yaesu 5-Byte Binary CAT ドライバ
+    /// Yaesu 5-Byte Binary CAT プロトコル向けドライバー (FT-1000, FT-1000MP, Mark-V 等)
     /// </summary>
     public class YaesuBinaryDriver : RigDriverBase
     {
@@ -16,12 +16,14 @@ namespace RigControlApp
 
         public YaesuBinaryDriver(RigConfig config) : base(config) { }
 
+        /// <summary>
+        /// 5バイトコマンドを送信
+        /// </summary>
         public void SendCommand(byte p4, byte p3, byte p2, byte p1, byte cmd)
         {
             lock (SyncLock)
             {
-                if (!IsOpen) throw new InvalidOperationException("ポートが開いていません。");
-
+                EnsureOpen();
                 byte[] packet = { p4, p3, p2, p1, cmd };
                 Port!.Write(packet, 0, packet.Length);
                 Thread.Sleep(30);
@@ -44,7 +46,6 @@ namespace RigControlApp
                     byte[] buf = new byte[32];
                     int read = 0;
                     int elapsed = 0;
-
                     while (read < 32 && elapsed < 200)
                     {
                         if (Port.BytesToRead > 0)
@@ -72,26 +73,15 @@ namespace RigControlApp
         private long DecodeFrequency(byte[] buf, int offset)
         {
             Config.Commands.TryGetValue("YaesuModel", out var model);
-
             return model switch
             {
-                // 3バイト (buf[1..3] / buf[17..19]) * 10
                 "FT-1000" =>
                     (((long)buf[offset] << 16) | ((long)buf[offset + 1] << 8) | buf[offset + 2]) * 10L,
-
-                // 4バイト / 1.60
                 "FT-1000MP" =>
                     (long)Math.Round((((long)buf[offset] << 24) | ((long)buf[offset + 1] << 16) | ((long)buf[offset + 2] << 8) | buf[offset + 3]) / 1.60),
-
-                // 4バイト BCD (下位桁から順にパック)
-                "MarkV" =>
-                    DecodeMarkVBcd(buf, offset),
-
-                // 4バイト * 10
                 "MarkVField" =>
                     (((long)buf[offset] << 24) | ((long)buf[offset + 1] << 16) | ((long)buf[offset + 2] << 8) | buf[offset + 3]) * 10L,
-
-                _ => DecodeMarkVBcd(buf, offset)
+                _ => DecodeMarkVBcd(buf, offset) // MarkV など
             };
         }
 
@@ -112,18 +102,18 @@ namespace RigControlApp
             if (vfo == VfoType.VfoA)
             {
                 _cachedFreqA = freqHz;
-                SendCommand(p4, p3, p2, p1, 0x0A); // VFO-A 設定
+                SendCommand(p4, p3, p2, p1, 0x0A);
             }
             else
             {
                 _cachedFreqB = freqHz;
-                SendCommand(p4, p3, p2, p1, 0x8A); // VFO-B 設定
+                SendCommand(p4, p3, p2, p1, 0x8A);
             }
         }
 
-        public override string GetMode() => _cachedMode;
+        public override string GetMode(VfoType vfo) => _cachedMode;
 
-        public override void SetMode(string modeName)
+        public override void SetMode(VfoType vfo, string modeName)
         {
             byte modeCode;
             if (Config.ModeMap.TryGetValue(modeName, out var hexStr))
@@ -140,16 +130,21 @@ namespace RigControlApp
                     "CW-R" or "CW-L" => 0x03,
                     "AM" => 0x04,
                     "FM" => 0x06,
-                    "RTTY" or "RTTY-L" => 0x08,
-                    "RTTY-U" => 0x09,
-                    "PKT" or "PKT-L" or "DATA-USB" or "DATA-LSB" => 0x0A,
-                    "PKT-FM" or "FM-N" => 0x0B,
+                    "RTTY" => 0x08,
                     _ => 0x01
                 };
             }
 
             _cachedMode = modeName;
-            SendCommand(0x00, 0x00, 0x00, modeCode, 0x0C);
+            string key = vfo == VfoType.VfoA ? "MD_SET_A" : "MD_SET_B";
+            if (Config.Commands.TryGetValue(key, out var tmpl))
+            {
+                SendRawCommand(string.Format(tmpl, modeCode.ToString("X2")));
+            }
+            else
+            {
+                SendCommand(0x00, 0x00, 0x00, modeCode, 0x0C);
+            }
         }
 
         public override void SelectVfo(VfoType vfo)
@@ -160,12 +155,30 @@ namespace RigControlApp
             SendRawCommand(hexCmd);
         }
 
-        // 新設: バンド選択コマンドの送信
-        public override void SelectBand(string bandKey)
+        public override void SelectBand(VfoType vfo, string bandKey)
         {
-            if (Config.Bands.TryGetValue(bandKey, out var cmd) && !string.IsNullOrEmpty(cmd))
+            if (Config.Bands.TryGetValue(bandKey, out var bandVal))
             {
-                SendRawCommand(cmd);
+                if (long.TryParse(bandVal, out long freqHz))
+                {
+                    SetFrequency(vfo, freqHz);
+                }
+                else
+                {
+                    SendRawCommand(bandVal);
+                }
+            }
+        }
+
+        public override void SetAntenna(VfoType vfo, string antennaIndex)
+        {
+            string antCode = Config.Antennas.GetValueOrDefault(antennaIndex, antennaIndex);
+            string key = vfo == VfoType.VfoA ? "ANT_SET_A" : "ANT_SET_B";
+            string tmpl = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("ANT_SET", ""));
+
+            if (!string.IsNullOrEmpty(tmpl))
+            {
+                SendRawCommand(string.Format(tmpl, antCode));
             }
         }
 
@@ -192,7 +205,6 @@ namespace RigControlApp
                     byte[] buf = new byte[5];
                     int read = 0;
                     int elapsed = 0;
-
                     while (read < 5 && elapsed < 100)
                     {
                         if (Port.BytesToRead > 0)
@@ -220,8 +232,7 @@ namespace RigControlApp
         {
             lock (SyncLock)
             {
-                if (!IsOpen) throw new InvalidOperationException("ポートが開いていません。");
-
+                EnsureOpen();
                 string[] hexParts = raw.Split(new[] { ' ', ',', ';', '-' }, StringSplitOptions.RemoveEmptyEntries);
                 if (hexParts.Length != 5) return "Invalid 5-Byte format";
 
@@ -240,12 +251,10 @@ namespace RigControlApp
         {
             long val = freqHz / 10;
             string s = val.ToString("D8");
-
             byte p1 = (byte)(((s[0] - '0') << 4) | (s[1] - '0'));
             byte p2 = (byte)(((s[2] - '0') << 4) | (s[3] - '0'));
             byte p3 = (byte)(((s[4] - '0') << 4) | (s[5] - '0'));
             byte p4 = (byte)(((s[6] - '0') << 4) | (s[7] - '0'));
-
             return (p1, p2, p3, p4);
         }
     }

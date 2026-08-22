@@ -6,10 +6,15 @@
 		<Nullable>enable</Nullable>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
+		<ApplicationIcon>orca_icon.ico</ApplicationIcon>
 	</PropertyGroup>
 
 	<ItemGroup>
 		<Compile Remove="Program.cs" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Content Include="orca_icon.ico" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -29,7 +34,7 @@
 		<None Update="config\icom.ini">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
-		<None Update="config\yaesu_5byte.ini">
+		<None Update="config\yaesu_binary.ini">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 	</ItemGroup>

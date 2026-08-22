@@ -5,15 +5,22 @@ using System.IO.Ports;
 
 namespace RigControlApp
 {
+    /// <summary>
+    /// 通信プロトコルの種別
+    /// </summary>
     public enum ProtocolType
     {
-        Ascii,
-        Civ,
-        YaesuBinary
+        Ascii,          // Kenwood / Yaesu 等の ASCII CAT (例: FA; MD02;)
+        Civ,            // Icom CI-V バイナリ形式 (0xFE 0xFE ...)
+        YaesuBinary     // Yaesu 5バイトバイナリ CAT (FT-1000, FT-1000MP 等)
     }
 
+    /// <summary>
+    /// 無線機接続およびコマンド設定を保持する設定クラス
+    /// </summary>
     public class RigConfig
     {
+        // --- シリアル通信設定 ---
         public string PortName { get; set; } = "COM3";
         public int BaudRate { get; set; } = 38400;
         public int DataBits { get; set; } = 8;
@@ -24,17 +31,23 @@ namespace RigControlApp
         public int ReadTimeoutMs { get; set; } = 1000;
         public int WriteTimeoutMs { get; set; } = 1000;
 
+        // --- プロトコル・ポーリング設定 ---
         public ProtocolType Protocol { get; set; } = ProtocolType.Ascii;
         public char Terminator { get; set; } = ';';
         public int FreqDigits { get; set; } = 11;
         public byte CivRigAddress { get; set; } = 0x94;
         public byte CivControllerAddress { get; set; } = 0xE0;
+        public int PollIntervalMs { get; set; } = 500;
 
+        // --- コマンドおよびマッピング設定 (.ini から動的読み込み) ---
         public Dictionary<string, string> Commands { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> ModeMap { get; } = new(StringComparer.OrdinalIgnoreCase);
-        // 新設: バンド名とバンド切替コマンドの対応マップ
         public Dictionary<string, string> Bands { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string> Antennas { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>
+        /// .ini ファイルから設定を読み込む
+        /// </summary>
         public static RigConfig LoadFromFile(string filePath)
         {
             if (!File.Exists(filePath))
@@ -48,15 +61,19 @@ namespace RigControlApp
             foreach (var rawLine in File.ReadAllLines(filePath))
             {
                 string line = rawLine.Trim();
+
+                // コメントおよび空行をスキップ (#, ;)
                 if (string.IsNullOrEmpty(line) || line.StartsWith("#") || line.StartsWith(";"))
                     continue;
 
+                // セクションヘッダの判定
                 if (line.StartsWith("[") && line.EndsWith("]"))
                 {
                     currentSection = line[1..^1].Trim().ToUpperInvariant();
                     continue;
                 }
 
+                // キーと値の分割
                 int eqIdx = line.IndexOf('=');
                 if (eqIdx <= 0) continue;
 
@@ -77,8 +94,11 @@ namespace RigControlApp
                     case "MODES":
                         config.ModeMap[key] = val;
                         break;
-                    case "BANDS": // 新規追加: BANDS セクションのパース
+                    case "BANDS":
                         config.Bands[key] = val;
+                        break;
+                    case "ANTENNAS":
+                        config.Antennas[key] = val;
                         break;
                 }
             }
@@ -86,6 +106,9 @@ namespace RigControlApp
             return config;
         }
 
+        /// <summary>
+        /// [SERIAL] セクションの値をパース
+        /// </summary>
         private static void ParseSerialConfig(RigConfig config, string key, string val)
         {
             if (key.Equals("PortName", StringComparison.OrdinalIgnoreCase)) config.PortName = val;
@@ -99,6 +122,9 @@ namespace RigControlApp
             else if (key.Equals("WriteTimeoutMs", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int wt)) config.WriteTimeoutMs = wt;
         }
 
+        /// <summary>
+        /// [PROTOCOL] セクションの値をパース
+        /// </summary>
         private static void ParseProtocolConfig(RigConfig config, string key, string val)
         {
             if (key.Equals("Type", StringComparison.OrdinalIgnoreCase))
@@ -111,7 +137,7 @@ namespace RigControlApp
                 {
                     config.Protocol = ProtocolType.Civ;
                 }
-                else if (val.Contains("Yaesu", StringComparison.OrdinalIgnoreCase) || val.Contains("5Byte", StringComparison.OrdinalIgnoreCase))
+                else if (val.Contains("Yaesu", StringComparison.OrdinalIgnoreCase) || val.Contains("Binary", StringComparison.OrdinalIgnoreCase))
                 {
                     config.Protocol = ProtocolType.YaesuBinary;
                 }
@@ -135,6 +161,10 @@ namespace RigControlApp
             else if (key.Equals("CivControllerAddress", StringComparison.OrdinalIgnoreCase))
             {
                 config.CivControllerAddress = Convert.ToByte(val, 16);
+            }
+            else if (key.Equals("PollIntervalMs", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int pi))
+            {
+                config.PollIntervalMs = Math.Max(50, pi);
             }
         }
     }

@@ -16,14 +16,14 @@ namespace RigControlApp
         private RigConfig _config = new();
         private readonly DispatcherTimer _pollTimer = new();
 
-        // VFO-A / VFO-B ごとの周波数・モードの個別管理
+        // VFO-A / VFO-B 内部状態キャッシュ
         private long _currentFreq = 14074000;
         private long _vfoAFreq = 14074000;
         private long _vfoBFreq = 7074000;
         private string _vfoAMode = "USB";
         private string _vfoBMode = "LSB";
-
         private VfoType _activeVfo = VfoType.VfoA;
+
         private bool _isBusy = false;
         private bool _isUpdatingText = false;
         private bool _isUpdatingBand = false;
@@ -41,12 +41,16 @@ namespace RigControlApp
             CmbPort.ItemsSource = SerialPort.GetPortNames();
             if (CmbPort.Items.Count > 0) CmbPort.SelectedIndex = 0;
 
-            // .ini ファイルの探索
-            var configs = Directory.GetFiles(".", "*.ini");
-            foreach (var f in configs) CmbConfig.Items.Add(Path.GetFileName(f));
+            // 実行ディレクトリおよび config/ フォルダ内の .ini ファイルを列挙
+            var configs = Directory.GetFiles(".", "*.ini", SearchOption.AllDirectories);
+            foreach (var f in configs)
+            {
+                string relPath = Path.GetRelativePath(".", f);
+                CmbConfig.Items.Add(relPath);
+            }
             if (CmbConfig.Items.Count > 0) CmbConfig.SelectedIndex = 0;
 
-            _pollTimer.Interval = TimeSpan.FromMilliseconds(500);
+            _pollTimer.Interval = TimeSpan.FromMilliseconds(_config.PollIntervalMs);
             _pollTimer.Tick += PollTimer_Tick;
 
             UpdateVfoUi();
@@ -69,8 +73,8 @@ namespace RigControlApp
                 BtnConnect.Content = "接続";
                 BtnConnect.Background = new SolidColorBrush(Color.FromRgb(2, 132, 199));
                 LedStatus.Fill = new SolidColorBrush(Color.FromRgb(148, 163, 184));
-                TxtStatus.Text = "未接続";
-                AppendLog("切断しました。");
+                TxtStatus.Text = "切断";
+                AppendLog("リグから切断しました。");
                 return;
             }
 
@@ -84,7 +88,9 @@ namespace RigControlApp
                     _config.PortName = CmbPort.SelectedItem.ToString()!;
                 }
 
-                // ドライバの生成とオープン
+                // 設定ファイルから取得したポーリング間隔をタイマーに適用
+                _pollTimer.Interval = TimeSpan.FromMilliseconds(_config.PollIntervalMs);
+
                 _driver = RigDriverFactory.Create(_config);
                 _driver.Open();
 
@@ -96,26 +102,27 @@ namespace RigControlApp
                 await FetchCurrentFrequencyAsync();
                 _pollTimer.Start();
 
-                AppendLog($"接続成功: {_config.PortName} ({_config.Protocol})");
+                AppendLog($"接続成功: {_config.PortName} ({_config.Protocol}), 周期: {_config.PollIntervalMs}ms");
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"接続に失敗しました: {ex.Message}", "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
-                AppendLog($"[エラー] 接続失敗: {ex.Message}");
+                MessageBox.Show($"接続エラー: {ex.Message}", "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+                AppendLog($"[接続エラー]: {ex.Message}");
             }
         }
 
         private async void PollTimer_Tick(object? sender, EventArgs e)
         {
             if (_driver == null || !_driver.IsOpen || _isBusy) return;
-            _isBusy = true;
 
+            _isBusy = true;
             try
             {
                 long freqMain = 0;
                 long freqSub = 0;
                 string mode = "";
                 int smeter = 0;
+
                 bool supportsDual = _driver.SupportsDualVfoRead;
                 var currentVfo = _activeVfo;
 
@@ -128,7 +135,7 @@ namespace RigControlApp
                         var otherVfo = currentVfo == VfoType.VfoA ? VfoType.VfoB : VfoType.VfoA;
                         freqSub = _driver.GetFrequency(otherVfo);
                     }
-                    mode = _driver.GetMode();
+                    mode = _driver.GetMode(currentVfo);
                     smeter = _driver.GetSMeter();
                 });
 
@@ -149,7 +156,6 @@ namespace RigControlApp
                 {
                     if (currentVfo == VfoType.VfoA) _vfoBFreq = freqSub;
                     else _vfoAFreq = freqSub;
-
                     TxtFreqSub.Text = $"{FormatFrequency(freqSub)} Hz";
                 }
                 else
@@ -174,7 +180,7 @@ namespace RigControlApp
             }
             catch
             {
-                // 通信タイムアウト等は無視して次回ポーリングに委ねる
+                // 通信エラー時は次の周期まで無視
             }
             finally
             {
@@ -197,7 +203,7 @@ namespace RigControlApp
                     if (_driver != null && _driver.IsOpen)
                     {
                         freq = _driver.GetFrequency(vfo);
-                        mode = _driver.GetMode();
+                        mode = _driver.GetMode(vfo);
                     }
                 });
 
@@ -225,7 +231,7 @@ namespace RigControlApp
             }
             catch (Exception ex)
             {
-                AppendLog($"[エラー] 状態取得失敗: {ex.Message}");
+                AppendLog($"[読込エラー]: {ex.Message}");
             }
         }
 
@@ -293,7 +299,6 @@ namespace RigControlApp
         {
             e.Handled = true;
             TxtFreqMain.Focus();
-
             Point pt = e.GetPosition(TxtFreqMain);
             int charIndex = TxtFreqMain.GetCharacterIndexFromPoint(pt, true);
             if (charIndex >= 0)
@@ -308,7 +313,6 @@ namespace RigControlApp
         {
             int caret = TxtFreqMain.CaretIndex;
             var (charIndex, _, _) = GetDigitInfo(caret);
-
             Rect rect = TxtFreqMain.GetRectFromCharacterIndex(charIndex);
             if (rect == Rect.Empty) return;
 
@@ -325,7 +329,6 @@ namespace RigControlApp
             TxtMarker.Visibility = Visibility.Visible;
             TxtMarker.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
             double markerWidth = TxtMarker.DesiredSize.Width;
-
             double left = rect.Left + (charWidth / 2.0) - (markerWidth / 2.0);
             Canvas.SetLeft(TxtMarker, Math.Max(0, left));
         }
@@ -345,7 +348,6 @@ namespace RigControlApp
 
                 UpdateFrequencyDisplay(_currentFreq);
                 UpdateBandSelection(_currentFreq);
-
                 TxtFreqMain.CaretIndex = charIndex;
                 UpdateMarkerPosition();
 
@@ -385,7 +387,6 @@ namespace RigControlApp
 
             UpdateFrequencyDisplay(_currentFreq);
             UpdateBandSelection(_currentFreq);
-
             TxtFreqMain.CaretIndex = charIndex;
             UpdateMarkerPosition();
 
@@ -454,11 +455,10 @@ namespace RigControlApp
             }
             catch (Exception ex)
             {
-                AppendLog($"[エラー] 周波数設定失敗: {ex.Message}");
+                AppendLog($"[周波数設定エラー]: {ex.Message}");
             }
         }
 
-        // バンド切替コマンドを用いたバンド変更処理
         private async void CmbBand_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_driver == null || !_driver.IsOpen || _isUpdatingBand) return;
@@ -469,18 +469,14 @@ namespace RigControlApp
                 try
                 {
                     _isBusy = true;
-                    await Task.Run(() =>
-                    {
-                        _driver.SelectBand(bandKey);
-                        Task.Delay(100).Wait(); // リグ側のバンド切り替え完了を待機
-                    });
-
-                    AppendLog($"バンド切替: {item.Content} (コマンド送信)");
+                    await Task.Run(() => _driver.SelectBand(_activeVfo, bandKey));
+                    await Task.Delay(100);
+                    AppendLog($"バンド切替: {item.Content} ({_activeVfo})");
                     await FetchCurrentFrequencyAsync();
                 }
                 catch (Exception ex)
                 {
-                    AppendLog($"[エラー] バンド切替失敗: {ex.Message}");
+                    AppendLog($"[バンド切替エラー]: {ex.Message}");
                 }
                 finally
                 {
@@ -498,22 +494,22 @@ namespace RigControlApp
                 string mode = btn.Content.ToString()!;
                 try
                 {
-                    await Task.Run(() => _driver.SetMode(mode));
+                    await Task.Run(() => _driver.SetMode(_activeVfo, mode));
                     _lastReadMode = mode;
+
                     if (_activeVfo == VfoType.VfoA) _vfoAMode = mode;
                     else _vfoBMode = mode;
 
                     UpdateModeUi(mode);
-                    AppendLog($"モード設定: {mode}");
+                    AppendLog($"モード変更: {mode} ({_activeVfo})");
                 }
                 catch (Exception ex)
                 {
-                    AppendLog($"[エラー] モード '{mode}' 設定失敗: {ex.Message}");
+                    AppendLog($"[モード変更エラー]: {ex.Message}");
                 }
             }
         }
 
-        // VFO-A 切り替え処理
         private async void BtnVfoA_Click(object sender, RoutedEventArgs e)
         {
             if (_activeVfo == VfoType.VfoA) return;
@@ -526,18 +522,14 @@ namespace RigControlApp
                 _isBusy = true;
                 try
                 {
-                    await Task.Run(() =>
-                    {
-                        _driver.SelectVfo(VfoType.VfoA);
-                        Task.Delay(60).Wait(); // リグ側のVFO切替処理を確実に待機
-                    });
-
-                    AppendLog("VFO-A に切り替えました");
+                    await Task.Run(() => _driver.SelectVfo(VfoType.VfoA));
+                    await Task.Delay(60);
+                    AppendLog("VFO-A を選択");
                     await FetchCurrentFrequencyAsync();
                 }
                 catch (Exception ex)
                 {
-                    AppendLog($"[エラー] VFO-A 切り替え失敗: {ex.Message}");
+                    AppendLog($"[VFO-A 選択エラー]: {ex.Message}");
                 }
                 finally
                 {
@@ -546,7 +538,6 @@ namespace RigControlApp
             }
         }
 
-        // VFO-B 切り替え処理
         private async void BtnVfoB_Click(object sender, RoutedEventArgs e)
         {
             if (_activeVfo == VfoType.VfoB) return;
@@ -559,18 +550,14 @@ namespace RigControlApp
                 _isBusy = true;
                 try
                 {
-                    await Task.Run(() =>
-                    {
-                        _driver.SelectVfo(VfoType.VfoB);
-                        Task.Delay(60).Wait(); // リグ側のVFO切替処理を確実に待機
-                    });
-
-                    AppendLog("VFO-B に切り替えました");
+                    await Task.Run(() => _driver.SelectVfo(VfoType.VfoB));
+                    await Task.Delay(60);
+                    AppendLog("VFO-B を選択");
                     await FetchCurrentFrequencyAsync();
                 }
                 catch (Exception ex)
                 {
-                    AppendLog($"[エラー] VFO-B 切り替え失敗: {ex.Message}");
+                    AppendLog($"[VFO-B 選択エラー]: {ex.Message}");
                 }
                 finally
                 {
@@ -623,22 +610,20 @@ namespace RigControlApp
 
             if (CmbAntenna.SelectedItem is ComboBoxItem item && item.Tag != null)
             {
-                string tag = item.Tag.ToString()!;
-                if (_config.Commands.TryGetValue(tag, out string? cmd) && !string.IsNullOrEmpty(cmd))
+                string antIndex = item.Tag.ToString()!;
+                try
                 {
-                    try
-                    {
-                        await Task.Run(() => _driver.SendRawCommand(cmd));
-                        AppendLog($"アンテナ設定: {item.Content} (コマンド: {cmd})");
-                    }
-                    catch (Exception ex)
-                    {
-                        AppendLog($"[エラー] アンテナ設定失敗: {ex.Message}");
-                    }
+                    _isBusy = true;
+                    await Task.Run(() => _driver.SetAntenna(_activeVfo, antIndex));
+                    AppendLog($"アンテナ切替: {item.Content} ({_activeVfo})");
                 }
-                else
+                catch (Exception ex)
                 {
-                    AppendLog($"[警告] アンテナ設定 {tag} が定義されていません。");
+                    AppendLog($"[アンテナ切替エラー]: {ex.Message}");
+                }
+                finally
+                {
+                    _isBusy = false;
                 }
             }
         }

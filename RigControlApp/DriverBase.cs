@@ -1,10 +1,12 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO.Ports;
 using System.Text;
 
 namespace RigControlApp
 {
+    /// <summary>
+    /// VFO の種別 (VFO-A / VFO-B)
+    /// </summary>
     public enum VfoType
     {
         VfoA,
@@ -12,18 +14,7 @@ namespace RigControlApp
     }
 
     /// <summary>
-    /// Yaesu モデル定義
-    /// </summary>
-    public enum YaesuModel
-    {
-        Ft1000,
-        Ft1000Mp,
-        MarkV,
-        MarkVField
-    }
-
-    /// <summary>
-    /// 共通リグ制御インターフェース (Yaesu, Kenwood, Icom)
+    /// リグ制御ドライバーの共通インターフェース
     /// </summary>
     public interface IRigDriver : IDisposable
     {
@@ -31,12 +22,14 @@ namespace RigControlApp
         void Close();
         bool IsOpen { get; }
         bool SupportsDualVfoRead { get; }
+
         long GetFrequency(VfoType vfo);
         void SetFrequency(VfoType vfo, long freqHz);
-        string GetMode();
-        void SetMode(string modeName);
+        string GetMode(VfoType vfo);
+        void SetMode(VfoType vfo, string modeName);
         void SelectVfo(VfoType vfo);
-        void SelectBand(string bandKey); // 新設: バンド選択コマンド実行
+        void SelectBand(VfoType vfo, string bandKey);
+        void SetAntenna(VfoType vfo, string antennaIndex);
         void SetPtt(bool txOn);
         string GetRigState();
         int GetSMeter();
@@ -46,7 +39,7 @@ namespace RigControlApp
     }
 
     /// <summary>
-    /// リグドライバ基底クラス
+    /// リグドライバーの共通基底クラス
     /// </summary>
     public abstract class RigDriverBase : IRigDriver
     {
@@ -122,12 +115,24 @@ namespace RigControlApp
             GC.SuppressFinalize(this);
         }
 
+        /// <summary>
+        /// ポートが開いていることを確認
+        /// </summary>
+        protected void EnsureOpen()
+        {
+            if (!IsOpen)
+            {
+                throw new InvalidOperationException("シリアルポートが開いていません。先に接続を行ってください。");
+            }
+        }
+
         public abstract long GetFrequency(VfoType vfo);
         public abstract void SetFrequency(VfoType vfo, long freqHz);
-        public abstract string GetMode();
-        public abstract void SetMode(string modeName);
+        public abstract string GetMode(VfoType vfo);
+        public abstract void SetMode(VfoType vfo, string modeName);
         public abstract void SelectVfo(VfoType vfo);
-        public abstract void SelectBand(string bandKey); // 新設: バンド選択
+        public abstract void SelectBand(VfoType vfo, string bandKey);
+        public abstract void SetAntenna(VfoType vfo, string antennaIndex);
         public abstract void SetPtt(bool txOn);
         public abstract string GetRigState();
         public abstract int GetSMeter();
@@ -137,7 +142,7 @@ namespace RigControlApp
     }
 
     /// <summary>
-    /// リグドライバファクトリ
+    /// リグ設定に応じたドライバーを生成するファクトリクラス
     /// </summary>
     public static class RigDriverFactory
     {
@@ -148,7 +153,7 @@ namespace RigControlApp
                 ProtocolType.Civ => new IcomCivDriver(config),
                 ProtocolType.YaesuBinary => new YaesuBinaryDriver(config),
                 ProtocolType.Ascii => new AsciiCatDriver(config),
-                _ => throw new NotSupportedException($"未対応プロトコル: {config.Protocol}")
+                _ => throw new NotSupportedException($"サポートされていないプロトコルです: {config.Protocol}")
             };
         }
     }
