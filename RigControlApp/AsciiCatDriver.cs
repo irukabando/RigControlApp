@@ -18,6 +18,8 @@ namespace RigControlApp
         /// </summary>
         private string ExecuteCommand(string cmd, bool expectResponse = true)
         {
+            if (string.IsNullOrWhiteSpace(cmd)) return string.Empty;
+
             lock (SyncLock)
             {
                 EnsureOpen();
@@ -54,10 +56,13 @@ namespace RigControlApp
         {
             string key = vfo == VfoType.VfoA ? "FA_GET" : "FB_GET";
             string defaultCmd = vfo == VfoType.VfoA ? "FA;" : "FB;";
-            string prefix = vfo == VfoType.VfoA ? "FA" : "FB";
+            //string prefix = vfo == VfoType.VfoA ? "FA" : "FB";
 
             string cmd = Config.Commands.GetValueOrDefault(key, defaultCmd);
             string resp = ExecuteCommand(cmd);
+
+            // cmd の末尾の終端記号 (;) を取り除いて prefix として利用
+            string prefix = cmd.TrimEnd(Config.Terminator);
 
             return ParseFrequencyResponse(resp, prefix);
         }
@@ -84,7 +89,8 @@ namespace RigControlApp
 
             // モード応答の解析 (MD02; や MD2; などの形式に対応)
             string code = resp;
-            if (code.StartsWith("MD", StringComparison.OrdinalIgnoreCase))
+            string prefix = cmd.TrimEnd(Config.Terminator);
+            if (code.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
                 code = code[2..];
                 if (code.Length > 1 && (code[0] == '0' || code[0] == '1'))
@@ -160,6 +166,40 @@ namespace RigControlApp
             }
         }
 
+        public override string GetAntenna(VfoType vfo)
+        {
+            string key = vfo == VfoType.VfoA ? "ANT_GET_A" : "ANT_GET_B";
+            string defaultCmd = vfo == VfoType.VfoA ? "AN0;" : "AN1;";
+            string cmd = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("ANT_GET", defaultCmd));
+            if (string.IsNullOrEmpty(cmd)) return string.Empty;
+
+            string resp = ExecuteCommand(cmd).TrimEnd(Config.Terminator);
+
+            // アンテナ応答の解析 (AN01; や AN1; などの形式に対応)
+            string code = resp;
+            if (code.StartsWith("AN", StringComparison.OrdinalIgnoreCase))
+            {
+                code = code[2..];
+                if (code.Length > 1 && (code[0] == '0' || code[0] == '1'))
+                {
+                    code = code[1..];
+                }
+            }
+
+            // [ANTENNAS] マッピングがある場合は逆引き (例: ANT_1=1 -> "1")
+            foreach (var kvp in Config.Antennas)
+            {
+                if (kvp.Value.Equals(code, StringComparison.OrdinalIgnoreCase))
+                {
+                    return kvp.Key.StartsWith("ANT_", StringComparison.OrdinalIgnoreCase)
+                        ? kvp.Key[4..]
+                        : kvp.Key;
+                }
+            }
+
+            return code;
+        }
+
         public override void SetAntenna(VfoType vfo, string antennaIndex)
         {
             // [ANTENNAS] からアンテナ番号に対応するパラメータを取得 (未定義なら antennaIndex をそのまま使用)
@@ -180,6 +220,114 @@ namespace RigControlApp
             ExecuteCommand(cmd, expectResponse: false);
         }
 
+        public override bool GetPtt()
+        {
+            string cmd = Config.Commands.GetValueOrDefault("TX_GET", "TX;");
+            string resp = ExecuteCommand(cmd).TrimEnd(Config.Terminator);
+
+            if (resp.StartsWith("TX", StringComparison.OrdinalIgnoreCase))
+            {
+                string val = resp[2..];
+                return val == "1" || val == "2";
+            }
+            if (resp.StartsWith("IF", StringComparison.OrdinalIgnoreCase) && resp.Length >= 29)
+            {
+                return resp[28] == '1';
+            }
+            return false;
+        }
+
+        public override bool GetTuner()
+        {
+            if (!Config.Commands.ContainsKey("TUNER_GET") && !Config.Commands.ContainsKey("AC"))
+            {
+                return false;
+            }
+
+            string cmd = Config.Commands.GetValueOrDefault("TUNER_GET", "AC;");
+            string resp = ExecuteCommand(cmd).TrimEnd(Config.Terminator);
+            if (resp.StartsWith("AC", StringComparison.OrdinalIgnoreCase))
+            {
+                string val = resp[2..].TrimStart('0');
+                return val == "1" || val == "2";
+            }
+            return false;
+        }
+
+        public override void SetTuner(bool tunerOn)
+        {
+            string cmd;
+            if (tunerOn)
+            {
+                cmd = Config.Commands.GetValueOrDefault("TUNER_ON", "AC001;");
+            }
+            else
+            {
+                cmd = Config.Commands.GetValueOrDefault("TUNER_OFF", "AC000;");
+            }
+
+            if (Config.Commands.TryGetValue("TUNER_SET", out var tmpl))
+            {
+                cmd = string.Format(tmpl, tunerOn ? 1 : 0);
+            }
+
+            ExecuteCommand(cmd, expectResponse: false);
+        }
+
+        public override string GetBandwidth(VfoType vfo)
+        {
+            string key = vfo == VfoType.VfoA ? "BW_GET_A" : "BW_GET_B";
+            string cmd = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("BW_GET", ""));
+            if (string.IsNullOrEmpty(cmd)) return string.Empty;
+
+            string resp = ExecuteCommand(cmd).TrimEnd(Config.Terminator);
+            string prefix = cmd.TrimEnd(Config.Terminator);
+
+            string code = resp;
+            if (code.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                code = code[prefix.Length..];
+            }
+            else if (code.Length >= 2 && char.IsLetter(code[0]) && char.IsLetter(code[1]))
+            {
+                int idx = 0;
+                while (idx < code.Length && !char.IsDigit(code[idx])) idx++;
+                if (idx < code.Length) code = code[idx..];
+            }
+
+            foreach (var kvp in Config.Filters)
+            {
+                if (kvp.Value.Equals(code, StringComparison.OrdinalIgnoreCase) ||
+                    kvp.Key.Equals(code, StringComparison.OrdinalIgnoreCase))
+                {
+                    return kvp.Key;
+                }
+            }
+
+            return code;
+        }
+
+        public override void SetBandwidth(VfoType vfo, string bandwidthKey)
+        {
+            string bwCode = Config.Filters.GetValueOrDefault(bandwidthKey, bandwidthKey);
+
+            string key = vfo == VfoType.VfoA ? "BW_SET_A" : "BW_SET_B";
+            string tmpl = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("BW_SET", ""));
+            if (string.IsNullOrEmpty(tmpl)) return;
+
+            string cmd;
+            if (int.TryParse(bwCode, out int val) && tmpl.Contains("{0:D"))
+            {
+                cmd = string.Format(tmpl, val);
+            }
+            else
+            {
+                cmd = string.Format(tmpl, bwCode);
+            }
+
+            ExecuteCommand(cmd, expectResponse: false);
+        }
+
         public override string GetRigState()
         {
             string cmd = Config.Commands.GetValueOrDefault("IF_GET", "IF;");
@@ -190,8 +338,39 @@ namespace RigControlApp
         {
             string cmd = Config.Commands.GetValueOrDefault("SM_GET", "SM0;");
             string resp = ExecuteCommand(cmd).TrimEnd(Config.Terminator);
+            return ParseMeterResponse(resp);
+        }
 
-            if (resp.Length > 2 && int.TryParse(resp[2..], out int val))
+        public override int GetPowerMeter()
+        {
+            if (!Config.Commands.ContainsKey("PO_GET")) return 0;
+            string cmd = Config.Commands.GetValueOrDefault("PO_GET", "RM4;");
+            string resp = ExecuteCommand(cmd).TrimEnd(Config.Terminator);
+            return ParseMeterResponse(resp);
+        }
+
+        public override int GetSwrMeter()
+        {
+            if (!Config.Commands.ContainsKey("SWR_GET")) return 0;
+            string cmd = Config.Commands.GetValueOrDefault("SWR_GET", "RM1;");
+            string resp = ExecuteCommand(cmd).TrimEnd(Config.Terminator);
+            return ParseMeterResponse(resp);
+        }
+
+        public override int GetAlcMeter()
+        {
+            if (!Config.Commands.ContainsKey("ALC_GET")) return 0;
+            string cmd = Config.Commands.GetValueOrDefault("ALC_GET", "RM3;");
+            string resp = ExecuteCommand(cmd).TrimEnd(Config.Terminator);
+            return ParseMeterResponse(resp);
+        }
+
+        private static int ParseMeterResponse(string resp)
+        {
+            if (string.IsNullOrEmpty(resp)) return 0;
+            int idx = 0;
+            while (idx < resp.Length && !char.IsDigit(resp[idx])) idx++;
+            if (idx < resp.Length && int.TryParse(resp[idx..], out int val))
             {
                 return val;
             }

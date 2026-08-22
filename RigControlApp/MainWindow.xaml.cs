@@ -22,12 +22,24 @@ namespace RigControlApp
         private long _vfoBFreq = 7074000;
         private string _vfoAMode = "USB";
         private string _vfoBMode = "LSB";
+        private string _vfoAAntenna = "1";
+        private string _vfoBAntenna = "1";
+        private string _vfoABandwidth = "";
+        private string _vfoBBandwidth = "";
         private VfoType _activeVfo = VfoType.VfoA;
+
+        // PTT・チューナー状態キャッシュ
+        private bool _isTxActive = false;
+        private bool _isTunerActive = false;
 
         private bool _isBusy = false;
         private bool _isUpdatingText = false;
         private bool _isUpdatingBand = false;
+        private bool _isUpdatingAntenna = false;
+        private bool _isUpdatingFilter = false;
         private string _lastReadMode = "";
+        private string _lastReadAntenna = "";
+        private string _lastReadBandwidth = "";
 
         public MainWindow()
         {
@@ -45,8 +57,8 @@ namespace RigControlApp
             var configs = Directory.GetFiles(".", "*.ini", SearchOption.AllDirectories);
             foreach (var f in configs)
             {
-                string relPath = Path.GetRelativePath(".", f);
-                CmbConfig.Items.Add(relPath);
+                string fileName = Path.GetFileNameWithoutExtension(f);
+                CmbConfig.Items.Add(fileName);
             }
             if (CmbConfig.Items.Count > 0) CmbConfig.SelectedIndex = 0;
 
@@ -54,12 +66,38 @@ namespace RigControlApp
             _pollTimer.Tick += PollTimer_Tick;
 
             UpdateVfoUi();
+            PopulateFilterList();
         }
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             TxtFreqMain.CaretIndex = 6;
             Dispatcher.BeginInvoke(new Action(UpdateMarkerPosition), DispatcherPriority.Loaded);
+        }
+
+        private void PopulateFilterList()
+        {
+            _isUpdatingFilter = true;
+            CmbFilter.Items.Clear();
+
+            if (_config.Filters.Count > 0)
+            {
+                foreach (var kvp in _config.Filters)
+                {
+                    CmbFilter.Items.Add(new ComboBoxItem { Content = kvp.Key, Tag = kvp.Value });
+                }
+            }
+            else
+            {
+                // デフォルトのフィルタ帯域段階
+                CmbFilter.Items.Add(new ComboBoxItem { Content = "250 Hz", Tag = "250" });
+                CmbFilter.Items.Add(new ComboBoxItem { Content = "500 Hz", Tag = "500" });
+                CmbFilter.Items.Add(new ComboBoxItem { Content = "1.8 kHz", Tag = "1800" });
+                CmbFilter.Items.Add(new ComboBoxItem { Content = "2.4 kHz", Tag = "2400" });
+                CmbFilter.Items.Add(new ComboBoxItem { Content = "2.8 kHz", Tag = "2800" });
+                CmbFilter.Items.Add(new ComboBoxItem { Content = "3.0 kHz", Tag = "3000" });
+            }
+            _isUpdatingFilter = false;
         }
 
         private async void BtnConnect_Click(object sender, RoutedEventArgs e)
@@ -91,6 +129,8 @@ namespace RigControlApp
                 // 設定ファイルから取得したポーリング間隔をタイマーに適用
                 _pollTimer.Interval = TimeSpan.FromMilliseconds(_config.PollIntervalMs);
 
+                PopulateFilterList();
+
                 _driver = RigDriverFactory.Create(_config);
                 _driver.Open();
 
@@ -99,7 +139,7 @@ namespace RigControlApp
                 LedStatus.Fill = new SolidColorBrush(Color.FromRgb(34, 197, 94));
                 TxtStatus.Text = $"{_config.PortName} 接続中";
 
-                await FetchCurrentFrequencyAsync();
+                await FetchCurrentInfoAsync();
                 _pollTimer.Start();
 
                 AppendLog($"接続成功: {_config.PortName} ({_config.Protocol}), 周期: {_config.PollIntervalMs}ms");
@@ -121,7 +161,14 @@ namespace RigControlApp
                 long freqMain = 0;
                 long freqSub = 0;
                 string mode = "";
+                string antenna = "";
+                string bandwidth = "";
                 int smeter = 0;
+                int power = 0;
+                int swr = 0;
+                int alc = 0;
+                bool isTx = false;
+                bool isTuner = false;
 
                 bool supportsDual = _driver.SupportsDualVfoRead;
                 var currentVfo = _activeVfo;
@@ -129,6 +176,7 @@ namespace RigControlApp
                 await Task.Run(() =>
                 {
                     if (_driver == null || !_driver.IsOpen) return;
+
                     freqMain = _driver.GetFrequency(currentVfo);
                     if (supportsDual)
                     {
@@ -136,7 +184,23 @@ namespace RigControlApp
                         freqSub = _driver.GetFrequency(otherVfo);
                     }
                     mode = _driver.GetMode(currentVfo);
-                    smeter = _driver.GetSMeter();
+                    antenna = _driver.GetAntenna(currentVfo);
+                    bandwidth = _driver.GetBandwidth(currentVfo);
+
+                    isTx = _driver.GetPtt();
+                    isTuner = _driver.GetTuner();
+
+                    // 通信負荷軽減とリアルタイム性の両立: RX時はSメーター、TX時はPO/SWR/ALCを取得
+                    if (isTx)
+                    {
+                        power = _driver.GetPowerMeter();
+                        swr = _driver.GetSwrMeter();
+                        alc = _driver.GetAlcMeter();
+                    }
+                    else
+                    {
+                        smeter = _driver.GetSMeter();
+                    }
                 });
 
                 if (freqMain > 0)
@@ -176,7 +240,42 @@ namespace RigControlApp
                     UpdateModeUi(mode);
                 }
 
+                if (!string.IsNullOrEmpty(antenna) && antenna != _lastReadAntenna)
+                {
+                    _lastReadAntenna = antenna;
+                    if (currentVfo == VfoType.VfoA) _vfoAAntenna = antenna;
+                    else _vfoBAntenna = antenna;
+
+                    UpdateAntennaUi(antenna);
+                }
+
+                if (!string.IsNullOrEmpty(bandwidth) && bandwidth != _lastReadBandwidth)
+                {
+                    _lastReadBandwidth = bandwidth;
+                    if (currentVfo == VfoType.VfoA) _vfoABandwidth = bandwidth;
+                    else _vfoBBandwidth = bandwidth;
+
+                    UpdateFilterUi(bandwidth);
+                }
+
+                // 4連メーターの同時更新
                 PbSMeter.Value = Math.Clamp(smeter, 0, 255);
+                PbPowerMeter.Value = Math.Clamp(power, 0, 255);
+                PbSwrMeter.Value = Math.Clamp(swr, 0, 255);
+                PbAlcMeter.Value = Math.Clamp(alc, 0, 255);
+
+                // PTT & ATU スイッチ状態の反映
+                if (isTx != _isTxActive)
+                {
+                    _isTxActive = isTx;
+                    UpdatePttUi(_isTxActive);
+                }
+
+                if (isTuner != _isTunerActive)
+                {
+                    _isTunerActive = isTuner;
+                    UpdateTunerUi(_isTunerActive);
+                }
             }
             catch
             {
@@ -188,7 +287,7 @@ namespace RigControlApp
             }
         }
 
-        private async Task FetchCurrentFrequencyAsync()
+        private async Task FetchCurrentInfoAsync()
         {
             if (_driver == null || !_driver.IsOpen) return;
 
@@ -196,6 +295,10 @@ namespace RigControlApp
             {
                 long freq = 0;
                 string mode = "";
+                string antenna = "";
+                string bandwidth = "";
+                bool isTx = false;
+                bool isTuner = false;
                 var vfo = _activeVfo;
 
                 await Task.Run(() =>
@@ -204,6 +307,10 @@ namespace RigControlApp
                     {
                         freq = _driver.GetFrequency(vfo);
                         mode = _driver.GetMode(vfo);
+                        antenna = _driver.GetAntenna(vfo);
+                        bandwidth = _driver.GetBandwidth(vfo);
+                        isTx = _driver.GetPtt();
+                        isTuner = _driver.GetTuner();
                     }
                 });
 
@@ -225,6 +332,30 @@ namespace RigControlApp
 
                     UpdateModeUi(mode);
                 }
+
+                if (!string.IsNullOrEmpty(antenna))
+                {
+                    _lastReadAntenna = antenna;
+                    if (vfo == VfoType.VfoA) _vfoAAntenna = antenna;
+                    else _vfoBAntenna = antenna;
+
+                    UpdateAntennaUi(antenna);
+                }
+
+                if (!string.IsNullOrEmpty(bandwidth))
+                {
+                    _lastReadBandwidth = bandwidth;
+                    if (vfo == VfoType.VfoA) _vfoABandwidth = bandwidth;
+                    else _vfoBBandwidth = bandwidth;
+
+                    UpdateFilterUi(bandwidth);
+                }
+
+                _isTxActive = isTx;
+                UpdatePttUi(_isTxActive);
+
+                _isTunerActive = isTuner;
+                UpdateTunerUi(_isTunerActive);
 
                 long subFreq = vfo == VfoType.VfoA ? _vfoBFreq : _vfoAFreq;
                 TxtFreqSub.Text = subFreq > 0 ? $"{FormatFrequency(subFreq)} Hz" : "---.---.--- Hz";
@@ -258,6 +389,163 @@ namespace RigControlApp
                     btn.Background = isMatch ? activeBg : inactiveBg;
                     btn.Foreground = isMatch ? activeFg : inactiveFg;
                     btn.BorderBrush = isMatch ? activeBorder : inactiveBorder;
+                }
+            }
+        }
+
+        private void UpdateAntennaUi(string activeAntenna)
+        {
+            for (int i = 0; i < CmbAntenna.Items.Count; i++)
+            {
+                if (CmbAntenna.Items[i] is ComboBoxItem item && item.Tag != null)
+                {
+                    if (item.Tag.ToString()!.Equals(activeAntenna, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (CmbAntenna.SelectedIndex != i)
+                        {
+                            _isUpdatingAntenna = true;
+                            CmbAntenna.SelectedIndex = i;
+                            _isUpdatingAntenna = false;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        private void UpdateFilterUi(string activeBandwidth)
+        {
+            _isUpdatingFilter = true;
+            bool matched = false;
+
+            for (int i = 0; i < CmbFilter.Items.Count; i++)
+            {
+                if (CmbFilter.Items[i] is ComboBoxItem item)
+                {
+                    string tagStr = item.Tag?.ToString() ?? "";
+                    string contentStr = item.Content?.ToString() ?? "";
+
+                    if (tagStr.Equals(activeBandwidth, StringComparison.OrdinalIgnoreCase) ||
+                        contentStr.Equals(activeBandwidth, StringComparison.OrdinalIgnoreCase) ||
+                        contentStr.StartsWith(activeBandwidth, StringComparison.OrdinalIgnoreCase))
+                    {
+                        CmbFilter.SelectedIndex = i;
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+
+            // 段階の選択肢に完全一致しない場合は直接テキストに反映
+            if (!matched && !string.IsNullOrEmpty(activeBandwidth))
+            {
+                CmbFilter.Text = $"{activeBandwidth} Hz";
+            }
+            _isUpdatingFilter = false;
+        }
+
+        private void UpdatePttUi(bool isTx)
+        {
+            if (isTx)
+            {
+                BtnPtt.Content = "TX [送信中]";
+                BtnPtt.Background = new SolidColorBrush(Color.FromRgb(239, 68, 68)); // 赤
+                BtnPtt.Foreground = new SolidColorBrush(Color.FromRgb(255, 255, 255));
+                BtnPtt.BorderBrush = new SolidColorBrush(Color.FromRgb(220, 38, 38));
+            }
+            else
+            {
+                BtnPtt.Content = "RX [受信]";
+                BtnPtt.Background = new SolidColorBrush(Color.FromRgb(226, 232, 240)); // ライトグレー
+                BtnPtt.Foreground = new SolidColorBrush(Color.FromRgb(51, 65, 85));
+                BtnPtt.BorderBrush = new SolidColorBrush(Color.FromRgb(203, 213, 225));
+            }
+        }
+
+        private void UpdateTunerUi(bool isTuner)
+        {
+            if (isTuner)
+            {
+                BtnTuner.Content = "ATU: ON";
+                BtnTuner.Background = new SolidColorBrush(Color.FromRgb(16, 185, 129)); // 緑
+                BtnTuner.Foreground = new SolidColorBrush(Color.FromRgb(255, 255, 255));
+                BtnTuner.BorderBrush = new SolidColorBrush(Color.FromRgb(5, 150, 105));
+            }
+            else
+            {
+                BtnTuner.Content = "ATU: OFF";
+                BtnTuner.Background = new SolidColorBrush(Color.FromRgb(226, 232, 240));
+                BtnTuner.Foreground = new SolidColorBrush(Color.FromRgb(51, 65, 85));
+                BtnTuner.BorderBrush = new SolidColorBrush(Color.FromRgb(203, 213, 225));
+            }
+        }
+
+        private async void BtnPtt_Click(object sender, RoutedEventArgs e)
+        {
+            if (_driver == null || !_driver.IsOpen) return;
+
+            bool targetTx = !_isTxActive;
+            try
+            {
+                await Task.Run(() => _driver.SetPtt(targetTx));
+                _isTxActive = targetTx;
+                UpdatePttUi(_isTxActive);
+                AppendLog(targetTx ? "PTT ON (送信開始)" : "PTT OFF (受信開始)");
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[PTT制御エラー]: {ex.Message}");
+            }
+        }
+
+        private async void BtnTuner_Click(object sender, RoutedEventArgs e)
+        {
+            if (_driver == null || !_driver.IsOpen) return;
+
+            bool targetTuner = !_isTunerActive;
+            try
+            {
+                await Task.Run(() => _driver.SetTuner(targetTuner));
+                _isTunerActive = targetTuner;
+                UpdateTunerUi(_isTunerActive);
+                AppendLog(targetTuner ? "アンテナチューナ ON" : "アンテナチューナ OFF");
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[チューナ制御エラー]: {ex.Message}");
+            }
+        }
+
+        private async void CmbFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_driver == null || !_driver.IsOpen || _isUpdatingFilter) return;
+
+            string selectedValue = "";
+            if (CmbFilter.SelectedItem is ComboBoxItem item)
+            {
+                selectedValue = item.Tag?.ToString() ?? item.Content?.ToString() ?? "";
+            }
+            else if (!string.IsNullOrEmpty(CmbFilter.Text))
+            {
+                selectedValue = CmbFilter.Text.Replace("Hz", "").Trim();
+            }
+
+            if (!string.IsNullOrEmpty(selectedValue))
+            {
+                try
+                {
+                    _isBusy = true;
+                    await Task.Run(() => _driver.SetBandwidth(_activeVfo, selectedValue));
+                    _lastReadBandwidth = selectedValue;
+                    AppendLog($"フィルタ帯域設定: {selectedValue} ({_activeVfo})");
+                }
+                catch (Exception ex)
+                {
+                    AppendLog($"[帯域設定エラー]: {ex.Message}");
+                }
+                finally
+                {
+                    _isBusy = false;
                 }
             }
         }
@@ -316,7 +604,7 @@ namespace RigControlApp
             Rect rect = TxtFreqMain.GetRectFromCharacterIndex(charIndex);
             if (rect == Rect.Empty) return;
 
-            double charWidth = 22.0;
+            double charWidth = 26.0;
             if (charIndex + 1 <= TxtFreqMain.Text.Length)
             {
                 Rect rectNext = TxtFreqMain.GetRectFromCharacterIndex(charIndex + 1);
@@ -472,7 +760,7 @@ namespace RigControlApp
                     await Task.Run(() => _driver.SelectBand(_activeVfo, bandKey));
                     await Task.Delay(100);
                     AppendLog($"バンド切替: {item.Content} ({_activeVfo})");
-                    await FetchCurrentFrequencyAsync();
+                    await FetchCurrentInfoAsync();
                 }
                 catch (Exception ex)
                 {
@@ -525,7 +813,7 @@ namespace RigControlApp
                     await Task.Run(() => _driver.SelectVfo(VfoType.VfoA));
                     await Task.Delay(60);
                     AppendLog("VFO-A を選択");
-                    await FetchCurrentFrequencyAsync();
+                    await FetchCurrentInfoAsync();
                 }
                 catch (Exception ex)
                 {
@@ -553,7 +841,7 @@ namespace RigControlApp
                     await Task.Run(() => _driver.SelectVfo(VfoType.VfoB));
                     await Task.Delay(60);
                     AppendLog("VFO-B を選択");
-                    await FetchCurrentFrequencyAsync();
+                    await FetchCurrentInfoAsync();
                 }
                 catch (Exception ex)
                 {
@@ -588,6 +876,8 @@ namespace RigControlApp
 
                 TxtVfoTitle.Text = "VFO-B (Hz)";
                 TxtSubVfoLabel.Text = "VFO-A: ";
+                UpdateAntennaUi(_vfoBAntenna);
+                UpdateFilterUi(_vfoBBandwidth);
             }
             else
             {
@@ -601,12 +891,14 @@ namespace RigControlApp
 
                 TxtVfoTitle.Text = "VFO-A (Hz)";
                 TxtSubVfoLabel.Text = "VFO-B: ";
+                UpdateAntennaUi(_vfoAAntenna);
+                UpdateFilterUi(_vfoABandwidth);
             }
         }
 
         private async void CmbAntenna_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (_driver == null || !_driver.IsOpen) return;
+            if (_driver == null || !_driver.IsOpen || _isUpdatingAntenna) return;
 
             if (CmbAntenna.SelectedItem is ComboBoxItem item && item.Tag != null)
             {
@@ -615,6 +907,10 @@ namespace RigControlApp
                 {
                     _isBusy = true;
                     await Task.Run(() => _driver.SetAntenna(_activeVfo, antIndex));
+                    _lastReadAntenna = antIndex;
+                    if (_activeVfo == VfoType.VfoA) _vfoAAntenna = antIndex;
+                    else _vfoBAntenna = antIndex;
+
                     AppendLog($"アンテナ切替: {item.Content} ({_activeVfo})");
                 }
                 catch (Exception ex)

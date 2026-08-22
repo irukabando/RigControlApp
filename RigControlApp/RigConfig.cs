@@ -44,6 +44,7 @@ namespace RigControlApp
         public Dictionary<string, string> ModeMap { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> Bands { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> Antennas { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, string> Filters { get; } = new(StringComparer.OrdinalIgnoreCase); // 追加: フィルタ帯域の段階設定
 
         /// <summary>
         /// .ini ファイルから設定を読み込む
@@ -80,6 +81,13 @@ namespace RigControlApp
                 string key = line[..eqIdx].Trim();
                 string val = line[(eqIdx + 1)..].Trim();
 
+                // 行末のインラインコメント (#) を安全に除去 (末尾の ; はCAT終端文字として保持)
+                int commentIdx = val.IndexOf('#');
+                if (commentIdx >= 0)
+                {
+                    val = val[..commentIdx].Trim();
+                }
+
                 switch (currentSection)
                 {
                     case "SERIAL":
@@ -99,6 +107,11 @@ namespace RigControlApp
                         break;
                     case "ANTENNAS":
                         config.Antennas[key] = val;
+                        break;
+                    case "FILTERS":
+                    case "FILTER":
+                    case "BANDWIDTHS":
+                        config.Filters[key] = val;
                         break;
                 }
             }

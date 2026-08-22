@@ -170,6 +170,8 @@ namespace RigControlApp
             }
         }
 
+        public override string GetAntenna(VfoType vfo) => string.Empty;
+
         public override void SetAntenna(VfoType vfo, string antennaIndex)
         {
             string antCode = Config.Antennas.GetValueOrDefault(antennaIndex, antennaIndex);
@@ -187,6 +189,16 @@ namespace RigControlApp
             byte p1 = txOn ? (byte)0x01 : (byte)0x00;
             SendCommand(0x00, 0x00, 0x00, p1, 0x0F);
         }
+
+        public override bool GetPtt() => false;
+
+        public override bool GetTuner() => false;
+
+        public override void SetTuner(bool tunerOn) { }
+
+        public override string GetBandwidth(VfoType vfo) => string.Empty;
+
+        public override void SetBandwidth(VfoType vfo, string bandwidthKey) { }
 
         public override string GetRigState() => $"Freq: {_cachedFreqA} Hz, Mode: {_cachedMode}";
 
@@ -223,6 +235,12 @@ namespace RigControlApp
                 return 0;
             }
         }
+
+        public override int GetPowerMeter() => 0;
+
+        public override int GetSwrMeter() => 0;
+
+        public override int GetAlcMeter() => 0;
 
         public override int GetAfGain() => 0;
 

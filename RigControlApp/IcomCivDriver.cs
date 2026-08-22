@@ -153,6 +153,42 @@ namespace RigControlApp
             }
         }
 
+        public override string GetAntenna(VfoType vfo)
+        {
+            // CI-V アンテナ状態問い合わせコマンド (0x12) を送信
+            var reply = SendFrame(new byte[] { 0x12 });
+
+            // 受信フレーム検証: [FE FE TO FROM 12 (ANT) ...]
+            if (reply.Count >= 6)
+            {
+                int cmdIdx = 4;
+                if (reply[cmdIdx] == 0x12 && reply.Count > cmdIdx + 1)
+                {
+                    byte antByte = reply[cmdIdx + 1];
+                    string codeHex = antByte.ToString("X2"); // "00", "01", ...
+                    string codeDec = antByte.ToString();     // "0", "1", ...
+
+                    // [ANTENNAS] マッピングがある場合は逆引き (例: 1=0 や ANT_1=00)
+                    foreach (var kvp in Config.Antennas)
+                    {
+                        if (kvp.Value.Equals(codeHex, StringComparison.OrdinalIgnoreCase) ||
+                            kvp.Value.Equals(codeDec, StringComparison.OrdinalIgnoreCase) ||
+                            kvp.Value.PadLeft(2, '0').Equals(codeHex, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return kvp.Key.StartsWith("ANT_", StringComparison.OrdinalIgnoreCase)
+                                ? kvp.Key[4..]
+                                : kvp.Key;
+                        }
+                    }
+
+                    // マッピング未定義時は 0-based (0x00) を 1-based ("1", "2"...) に変換して返却
+                    return (antByte + 1).ToString();
+                }
+            }
+
+            return string.Empty;
+        }
+
         public override void SetAntenna(VfoType vfo, string antennaIndex)
         {
             string antCode = Config.Antennas.GetValueOrDefault(antennaIndex, antennaIndex);
@@ -167,6 +203,68 @@ namespace RigControlApp
             SendFrame(new byte[] { 0x1C, 0x00, state }, expectReply: false);
         }
 
+        public override bool GetPtt()
+        {
+            var reply = SendFrame(new byte[] { 0x1C, 0x00 });
+            if (reply.Count >= 7 && reply[4] == 0x1C && reply[5] == 0x00)
+            {
+                return reply[6] == 0x01;
+            }
+            return false;
+        }
+
+        public override bool GetTuner()
+        {
+            var reply = SendFrame(new byte[] { 0x1C, 0x01 });
+            if (reply.Count >= 7 && reply[4] == 0x1C && reply[5] == 0x01)
+            {
+                return reply[6] == 0x01 || reply[6] == 0x02;
+            }
+            return false;
+        }
+
+        public override void SetTuner(bool tunerOn)
+        {
+            byte state = (byte)(tunerOn ? 0x01 : 0x00);
+            SendFrame(new byte[] { 0x1C, 0x01, state }, expectReply: false);
+        }
+
+        public override string GetBandwidth(VfoType vfo)
+        {
+            var reply = SendFrame(new byte[] { 0x1A, 0x03 });
+            if (reply.Count >= 7 && reply[4] == 0x1A && reply[5] == 0x03)
+            {
+                int bw = BcdByteToInt(reply[6]) * 50;
+                string code = bw.ToString();
+
+                foreach (var kvp in Config.Filters)
+                {
+                    if (kvp.Value.Equals(code, StringComparison.OrdinalIgnoreCase) ||
+                        kvp.Key.Equals(code, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return kvp.Key;
+                    }
+                }
+                return code;
+            }
+            return string.Empty;
+        }
+
+        public override void SetBandwidth(VfoType vfo, string bandwidthKey)
+        {
+            string bwVal = Config.Filters.GetValueOrDefault(bandwidthKey, bandwidthKey);
+            if (int.TryParse(bwVal, out int hz))
+            {
+                int val = hz / 50;
+                byte b = IntToBcdByte(val);
+                SendFrame(new byte[] { 0x1A, 0x03, b }, expectReply: false);
+            }
+            else
+            {
+                SendRawCommand(bwVal);
+            }
+        }
+
         public override string GetRigState()
         {
             long freq = GetFrequency(VfoType.VfoA);
@@ -177,6 +275,42 @@ namespace RigControlApp
         public override int GetSMeter()
         {
             var reply = SendFrame(new byte[] { 0x15, 0x02 });
+            if (reply.Count >= 8)
+            {
+                int val1 = BcdByteToInt(reply[6]);
+                int val2 = BcdByteToInt(reply[7]);
+                return val1 * 100 + val2;
+            }
+            return 0;
+        }
+
+        public override int GetPowerMeter()
+        {
+            var reply = SendFrame(new byte[] { 0x15, 0x11 });
+            if (reply.Count >= 8)
+            {
+                int val1 = BcdByteToInt(reply[6]);
+                int val2 = BcdByteToInt(reply[7]);
+                return val1 * 100 + val2;
+            }
+            return 0;
+        }
+
+        public override int GetSwrMeter()
+        {
+            var reply = SendFrame(new byte[] { 0x15, 0x12 });
+            if (reply.Count >= 8)
+            {
+                int val1 = BcdByteToInt(reply[6]);
+                int val2 = BcdByteToInt(reply[7]);
+                return val1 * 100 + val2;
+            }
+            return 0;
+        }
+
+        public override int GetAlcMeter()
+        {
+            var reply = SendFrame(new byte[] { 0x15, 0x13 });
             if (reply.Count >= 8)
             {
                 int val1 = BcdByteToInt(reply[6]);

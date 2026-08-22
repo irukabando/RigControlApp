@@ -29,10 +29,19 @@ namespace RigControlApp
         void SetMode(VfoType vfo, string modeName);
         void SelectVfo(VfoType vfo);
         void SelectBand(VfoType vfo, string bandKey);
+        string GetAntenna(VfoType vfo); // 追加
         void SetAntenna(VfoType vfo, string antennaIndex);
         void SetPtt(bool txOn);
+        bool GetPtt();                   // 追加: PTT状態取得
+        bool GetTuner();                 // 追加: アンテナチューナー状態取得
+        void SetTuner(bool tunerOn);     // 追加: アンテナチューナーON/OFF設定
+        string GetBandwidth(VfoType vfo); // 追加: フィルタ帯域取得
+        void SetBandwidth(VfoType vfo, string bandwidthKey); // 追加: フィルタ帯域設定
         string GetRigState();
         int GetSMeter();
+        int GetPowerMeter();             // 追加: Powerメーター値取得
+        int GetSwrMeter();               // 追加: SWRメーター値取得
+        int GetAlcMeter();               // 追加: ALCメーター値取得
         int GetAfGain();
         void SetAfGain(int gainValue);
         string SendRawCommand(string rawInput);
@@ -48,6 +57,8 @@ namespace RigControlApp
         protected readonly object SyncLock = new();
 
         public virtual bool SupportsDualVfoRead => false;
+
+        public abstract string GetAntenna(VfoType vfo);
 
         protected RigDriverBase(RigConfig config)
         {
@@ -134,8 +145,16 @@ namespace RigControlApp
         public abstract void SelectBand(VfoType vfo, string bandKey);
         public abstract void SetAntenna(VfoType vfo, string antennaIndex);
         public abstract void SetPtt(bool txOn);
+        public abstract bool GetPtt();
+        public abstract bool GetTuner();
+        public abstract void SetTuner(bool tunerOn);
+        public abstract string GetBandwidth(VfoType vfo);
+        public abstract void SetBandwidth(VfoType vfo, string bandwidthKey);
         public abstract string GetRigState();
         public abstract int GetSMeter();
+        public abstract int GetPowerMeter();
+        public abstract int GetSwrMeter();
+        public abstract int GetAlcMeter();
         public abstract int GetAfGain();
         public abstract void SetAfGain(int gainValue);
         public abstract string SendRawCommand(string rawInput);
