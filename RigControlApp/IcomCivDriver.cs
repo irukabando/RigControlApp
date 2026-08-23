@@ -279,7 +279,8 @@ namespace RigControlApp
             {
                 int val1 = BcdByteToInt(reply[6]);
                 int val2 = BcdByteToInt(reply[7]);
-                return val1 * 100 + val2;
+                int raw = val1 * 100 + val2;
+                return NormalizeMeterValue(raw, Config.SMeterMax);
             }
             return 0;
         }
@@ -291,7 +292,8 @@ namespace RigControlApp
             {
                 int val1 = BcdByteToInt(reply[6]);
                 int val2 = BcdByteToInt(reply[7]);
-                return val1 * 100 + val2;
+                int raw = val1 * 100 + val2;
+                return NormalizeMeterValue(raw, Config.PowerMeterMax);
             }
             return 0;
         }
@@ -303,7 +305,8 @@ namespace RigControlApp
             {
                 int val1 = BcdByteToInt(reply[6]);
                 int val2 = BcdByteToInt(reply[7]);
-                return val1 * 100 + val2;
+                int raw = val1 * 100 + val2;
+                return NormalizeMeterValue(raw, Config.SwrMeterMax);
             }
             return 0;
         }
@@ -315,7 +318,8 @@ namespace RigControlApp
             {
                 int val1 = BcdByteToInt(reply[6]);
                 int val2 = BcdByteToInt(reply[7]);
-                return val1 * 100 + val2;
+                int raw = val1 * 100 + val2;
+                return NormalizeMeterValue(raw, Config.AlcMeterMax);
             }
             return 0;
         }

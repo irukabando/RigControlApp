@@ -17,7 +17,7 @@ namespace RigControlApp
         public YaesuBinaryDriver(RigConfig config) : base(config) { }
 
         /// <summary>
-        /// 5バイトコマンドを送信
+        /// 5バイトパケット送信
         /// </summary>
         public void SendCommand(byte p4, byte p3, byte p2, byte p1, byte cmd)
         {
@@ -39,7 +39,7 @@ namespace RigControlApp
                 try
                 {
                     Port!.DiscardInBuffer();
-                    // ステータス要求: 00 00 00 03 10
+                    // ステータス更新要求: 00 00 00 03 10
                     byte[] request = { 0x00, 0x00, 0x00, 0x03, 0x10 };
                     Port.Write(request, 0, request.Length);
 
@@ -81,7 +81,7 @@ namespace RigControlApp
                     (long)Math.Round((((long)buf[offset] << 24) | ((long)buf[offset + 1] << 16) | ((long)buf[offset + 2] << 8) | buf[offset + 3]) / 1.60),
                 "MarkVField" =>
                     (((long)buf[offset] << 24) | ((long)buf[offset + 1] << 16) | ((long)buf[offset + 2] << 8) | buf[offset + 3]) * 10L,
-                _ => DecodeMarkVBcd(buf, offset) // MarkV など
+                _ => DecodeMarkVBcd(buf, offset) // MarkV デフォルト
             };
         }
 
@@ -177,7 +177,6 @@ namespace RigControlApp
             string antCode = Config.Antennas.GetValueOrDefault(antennaIndex, antennaIndex);
             string key = vfo == VfoType.VfoA ? "ANT_SET_A" : "ANT_SET_B";
             string tmpl = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("ANT_SET", ""));
-
             if (!string.IsNullOrEmpty(tmpl))
             {
                 SendRawCommand(string.Format(tmpl, antCode));
@@ -228,7 +227,7 @@ namespace RigControlApp
                         }
                     }
 
-                    if (read >= 1) return buf[0];
+                    if (read >= 1) return NormalizeMeterValue(buf[0], Config.SMeterMax);
                 }
                 catch { }
 

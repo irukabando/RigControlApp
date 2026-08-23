@@ -56,7 +56,6 @@ namespace RigControlApp
         {
             string key = vfo == VfoType.VfoA ? "FA_GET" : "FB_GET";
             string defaultCmd = vfo == VfoType.VfoA ? "FA;" : "FB;";
-            //string prefix = vfo == VfoType.VfoA ? "FA" : "FB";
 
             string cmd = Config.Commands.GetValueOrDefault(key, defaultCmd);
             string resp = ExecuteCommand(cmd);
@@ -92,7 +91,18 @@ namespace RigControlApp
             string prefix = cmd.TrimEnd(Config.Terminator);
             if (code.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
-                code = code[2..];
+                code = code[prefix.Length..];
+                if (code.Length > 1 && (code[0] == '0' || code[0] == '1'))
+                {
+                    code = code[1..];
+                }
+            }
+            else
+            {
+                // 送信プレフィックスと完全一致しない場合（例: MD; に対して MD02; など）は先頭の英字を除去
+                int idx = 0;
+                while (idx < code.Length && !char.IsDigit(code[idx])) idx++;
+                if (idx < code.Length) code = code[idx..];
                 if (code.Length > 1 && (code[0] == '0' || code[0] == '1'))
                 {
                     code = code[1..];
@@ -177,7 +187,16 @@ namespace RigControlApp
 
             // アンテナ応答の解析 (AN01; や AN1; などの形式に対応)
             string code = resp;
-            if (code.StartsWith("AN", StringComparison.OrdinalIgnoreCase))
+            string prefix = cmd.TrimEnd(Config.Terminator);
+            if (code.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                code = code[prefix.Length..];
+                if (code.Length > 1 && (code[0] == '0' || code[0] == '1'))
+                {
+                    code = code[1..];
+                }
+            }
+            else if (code.StartsWith("AN", StringComparison.OrdinalIgnoreCase))
             {
                 code = code[2..];
                 if (code.Length > 1 && (code[0] == '0' || code[0] == '1'))
@@ -338,7 +357,8 @@ namespace RigControlApp
         {
             string cmd = Config.Commands.GetValueOrDefault("SM_GET", "SM0;");
             string resp = ExecuteCommand(cmd).TrimEnd(Config.Terminator);
-            return ParseMeterResponse(resp);
+            int rawVal = ParseMeterResponse(resp, cmd);
+            return NormalizeMeterValue(rawVal, Config.SMeterMax);
         }
 
         public override int GetPowerMeter()
@@ -346,7 +366,8 @@ namespace RigControlApp
             if (!Config.Commands.ContainsKey("PO_GET")) return 0;
             string cmd = Config.Commands.GetValueOrDefault("PO_GET", "RM4;");
             string resp = ExecuteCommand(cmd).TrimEnd(Config.Terminator);
-            return ParseMeterResponse(resp);
+            int rawVal = ParseMeterResponse(resp, cmd);
+            return NormalizeMeterValue(rawVal, Config.PowerMeterMax);
         }
 
         public override int GetSwrMeter()
@@ -354,7 +375,8 @@ namespace RigControlApp
             if (!Config.Commands.ContainsKey("SWR_GET")) return 0;
             string cmd = Config.Commands.GetValueOrDefault("SWR_GET", "RM1;");
             string resp = ExecuteCommand(cmd).TrimEnd(Config.Terminator);
-            return ParseMeterResponse(resp);
+            int rawVal = ParseMeterResponse(resp, cmd);
+            return NormalizeMeterValue(rawVal, Config.SwrMeterMax);
         }
 
         public override int GetAlcMeter()
@@ -362,15 +384,42 @@ namespace RigControlApp
             if (!Config.Commands.ContainsKey("ALC_GET")) return 0;
             string cmd = Config.Commands.GetValueOrDefault("ALC_GET", "RM3;");
             string resp = ExecuteCommand(cmd).TrimEnd(Config.Terminator);
-            return ParseMeterResponse(resp);
+            int rawVal = ParseMeterResponse(resp, cmd);
+            return NormalizeMeterValue(rawVal, Config.AlcMeterMax);
         }
 
-        private static int ParseMeterResponse(string resp)
+        private int ParseMeterResponse(string resp, string sentCmd)
         {
             if (string.IsNullOrEmpty(resp)) return 0;
-            int idx = 0;
-            while (idx < resp.Length && !char.IsDigit(resp[idx])) idx++;
-            if (idx < resp.Length && int.TryParse(resp[idx..], out int val))
+
+            resp = resp.TrimEnd(Config.Terminator);
+            string prefix = sentCmd.TrimEnd(Config.Terminator);
+            string data = resp;
+
+            // 送信コマンドプレフィックス (例: "RM1", "SM0") を除去
+            if (data.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                data = data[prefix.Length..];
+            }
+            else
+            {
+                // 先頭の非数字文字（コマンドヘッダ等）を除去
+                int idx = 0;
+                while (idx < data.Length && !char.IsDigit(data[idx])) idx++;
+                if (idx < data.Length)
+                {
+                    data = data[idx..];
+                }
+            }
+
+            // Yaesu 応答対策: "120000" (P2: 3桁 + P3固定値: 3桁) のように 6 桁ある場合は先頭 3 桁 (P2) を抽出
+            // Kenwood TS-590 は "0015" (4桁) のため 4 桁のままパース
+            if (data.Length == 6)
+            {
+                data = data[..3];
+            }
+
+            if (int.TryParse(data, out int val))
             {
                 return val;
             }
@@ -381,8 +430,21 @@ namespace RigControlApp
         {
             string cmd = Config.Commands.GetValueOrDefault("AG_GET", "AG0;");
             string resp = ExecuteCommand(cmd).TrimEnd(Config.Terminator);
+            string prefix = cmd.TrimEnd(Config.Terminator);
 
-            if (resp.Length > 3 && int.TryParse(resp[3..], out int val))
+            string data = resp;
+            if (data.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                data = data[prefix.Length..];
+            }
+            else
+            {
+                int idx = 0;
+                while (idx < data.Length && !char.IsDigit(data[idx])) idx++;
+                if (idx < data.Length) data = data[idx..];
+            }
+
+            if (int.TryParse(data, out int val))
             {
                 return val;
             }

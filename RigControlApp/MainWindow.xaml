@@ -123,7 +123,7 @@
                             <Grid Margin="0,1,0,0">
                                 <TextBlock Text="1" FontSize="9" Foreground="#64748B" HorizontalAlignment="Left"/>
                                 <TextBlock Text="9" FontSize="9" Foreground="#64748B" HorizontalAlignment="Center"/>
-                                <TextBlock Text="+60dB" FontSize="9" Foreground="#EF4444" FontWeight="Bold" HorizontalAlignment="Right"/>
+                                <TextBlock Text="+" FontSize="9" Foreground="#EF4444" FontWeight="Bold" HorizontalAlignment="Right"/>
                             </Grid>
                         </StackPanel>
                     </Grid>
@@ -176,7 +176,7 @@
                                          Foreground="#8B5CF6" Background="#E2E8F0" BorderBrush="#CBD5E1" BorderThickness="1"/>
                             <Grid Margin="0,1,0,0">
                                 <TextBlock Text="0" FontSize="9" Foreground="#64748B" HorizontalAlignment="Left"/>
-                                <TextBlock Text="" FontSize="9" Foreground="#8B5CF6" HorizontalAlignment="Center"/>
+                                <TextBlock Text="-" FontSize="9" Foreground="#8B5CF6" HorizontalAlignment="Center"/>
                                 <TextBlock Text="+" FontSize="9" Foreground="#EF4444" FontWeight="Bold" HorizontalAlignment="Right"/>
                             </Grid>
                         </StackPanel>
@@ -188,23 +188,35 @@
         <!-- 3. コントロール (バンド/モード/フィルタ/VFO/ANT/PTT/ATU) -->
         <Grid Grid.Row="2" Margin="0,0,0,8">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="1.3*"/>
+                <ColumnDefinition Width="1.15*"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
             <!-- バンド、フィルタ＆モード切替 -->
-            <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="0,0,4,0">
-                <StackPanel>
-                    <Grid Margin="0,0,0,8">
+            <Border Grid.Column="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,4,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <!-- バンド選択 & フィルタ帯域調整 -->
+                    <Grid Grid.Row="0">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
                         <!-- バンド選択 -->
-                        <StackPanel Orientation="Horizontal" Grid.Column="0" Margin="0,0,6,0">
+                        <Grid Grid.Column="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
                             <TextBlock Text="BAND:" VerticalAlignment="Center" Margin="0,0,6,0" FontWeight="Bold"/>
-                            <ComboBox x:Name="CmbBand" Width="105" Height="28" SelectionChanged="CmbBand_SelectionChanged">
+                            <ComboBox x:Name="CmbBand" Grid.Column="1" Height="28" SelectionChanged="CmbBand_SelectionChanged">
                                 <ComboBoxItem Content="1.9 MHz" Tag="1.9MHz"/>
                                 <ComboBoxItem Content="3.5 MHz" Tag="3.5MHz"/>
                                 <ComboBoxItem Content="7 MHz" Tag="7MHz"/>
@@ -218,56 +230,90 @@
                                 <ComboBoxItem Content="144 MHz" Tag="144MHz"/>
                                 <ComboBoxItem Content="430 MHz" Tag="430MHz"/>
                             </ComboBox>
-                        </StackPanel>
+                        </Grid>
 
                         <!-- フィルタ帯域調整 -->
-                        <StackPanel Orientation="Horizontal" Grid.Column="1">
+                        <Grid Grid.Column="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
                             <TextBlock Text="FILT:" VerticalAlignment="Center" Margin="0,0,6,0" FontWeight="Bold"/>
-                            <ComboBox x:Name="CmbFilter" Width="105" Height="28" IsEditable="True" SelectionChanged="CmbFilter_SelectionChanged"/>
-                        </StackPanel>
+                            <ComboBox x:Name="CmbFilter" Grid.Column="1" Height="28" IsEditable="True" SelectionChanged="CmbFilter_SelectionChanged"/>
+                        </Grid>
                     </Grid>
 
                     <!-- モード選択ボタン群 -->
-                    <WrapPanel x:Name="PanelModes">
-                        <Button Content="LSB" Width="48" Height="26" Margin="0,0,4,4" Click="ModeButton_Click"/>
-                        <Button Content="USB" Width="48" Height="26" Margin="0,0,4,4" Click="ModeButton_Click"/>
-                        <Button Content="CW" Width="48" Height="26" Margin="0,0,4,4" Click="ModeButton_Click"/>
-                        <Button Content="FM" Width="48" Height="26" Margin="0,0,4,4" Click="ModeButton_Click"/>
-                        <Button Content="AM" Width="48" Height="26" Margin="0,0,4,4" Click="ModeButton_Click"/>
-                        <Button Content="DATA-USB" Width="78" Height="26" Margin="0,0,0,4" Click="ModeButton_Click"/>
-                    </WrapPanel>
-                </StackPanel>
+                    <UniformGrid Grid.Row="2" x:Name="PanelModes" Columns="6">
+                        <Button Content="LSB" Height="28" Margin="0,0,2,0" Click="ModeButton_Click"/>
+                        <Button Content="USB" Height="28" Margin="2,0,2,0" Click="ModeButton_Click"/>
+                        <Button Content="CW" Height="28" Margin="2,0,2,0" Click="ModeButton_Click"/>
+                        <Button Content="FM" Height="28" Margin="2,0,2,0" Click="ModeButton_Click"/>
+                        <Button Content="AM" Height="28" Margin="2,0,2,0" Click="ModeButton_Click"/>
+                        <Button Content="DATA-USB" FontSize="11" Height="28" Margin="2,0,0,0" Click="ModeButton_Click"/>
+                    </UniformGrid>
+                </Grid>
             </Border>
 
             <!-- VFO & アンテナ & スイッチ (PTT / ATU) -->
-            <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="10,8" Margin="4,0,0,0">
-                <StackPanel VerticalAlignment="Center">
-                    <!-- VFO 選択 -->
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                        <TextBlock Text="VFO:" VerticalAlignment="Center" Margin="0,0,6,0" Width="36" FontWeight="Bold"/>
-                        <Button x:Name="BtnVfoA" Content="VFO-A" Width="68" Height="26" Margin="0,0,6,0" Background="#0284C7" Foreground="#FFFFFF" BorderBrush="#0284C7" Click="BtnVfoA_Click"/>
-                        <Button x:Name="BtnVfoB" Content="VFO-B" Width="68" Height="26" Background="#FFFFFF" Foreground="#334155" BorderBrush="#CBD5E1" Click="BtnVfoB_Click"/>
-                    </StackPanel>
+            <Border Grid.Column="1" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="4,0,0,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="8"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
 
-                    <!-- アンテナ選択 -->
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                        <TextBlock Text="ANT:" VerticalAlignment="Center" Margin="0,0,6,0" Width="36" FontWeight="Bold"/>
-                        <ComboBox x:Name="CmbAntenna" Width="142" Height="26" SelectionChanged="CmbAntenna_SelectionChanged">
-                            <ComboBoxItem Content="ANT 1" Tag="1"/>
-                            <ComboBoxItem Content="ANT 2" Tag="2"/>
-                            <ComboBoxItem Content="ANT 3" Tag="3"/>
-                            <ComboBoxItem Content="ANT 4" Tag="4"/>
-                        </ComboBox>
-                    </StackPanel>
+                    <!-- VFO 選択 & アンテナ選択 -->
+                    <Grid Grid.Row="0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- VFO 選択 -->
+                        <Grid Grid.Column="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="VFO:" VerticalAlignment="Center" Margin="0,0,6,0" FontWeight="Bold"/>
+                            <UniformGrid Grid.Column="1" Columns="2">
+                                <Button x:Name="BtnVfoA" Content="VFO-A" Height="28" Margin="0,0,2,0" Background="#0284C7" Foreground="#FFFFFF" BorderBrush="#0284C7" Click="BtnVfoA_Click"/>
+                                <Button x:Name="BtnVfoB" Content="VFO-B" Height="28" Margin="2,0,0,0" Background="#FFFFFF" Foreground="#334155" BorderBrush="#CBD5E1" Click="BtnVfoB_Click"/>
+                            </UniformGrid>
+                        </Grid>
+
+                        <!-- アンテナ選択 -->
+                        <Grid Grid.Column="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="ANT:" VerticalAlignment="Center" Margin="0,0,6,0" FontWeight="Bold"/>
+                            <ComboBox x:Name="CmbAntenna" Grid.Column="1" Height="28" SelectionChanged="CmbAntenna_SelectionChanged">
+                                <ComboBoxItem Content="ANT 1" Tag="1"/>
+                                <ComboBoxItem Content="ANT 2" Tag="2"/>
+                                <ComboBoxItem Content="ANT 3" Tag="3"/>
+                                <ComboBoxItem Content="ANT 4" Tag="4"/>
+                            </ComboBox>
+                        </Grid>
+                    </Grid>
 
                     <!-- PTT & ATU スイッチ -->
-                    <StackPanel Orientation="Horizontal">
-                        <Button x:Name="BtnPtt" Content="RX [受信]" Width="96" Height="28" Margin="0,0,6,0"
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="8"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="BtnPtt" Grid.Column="0" Content="RX [受信]" Height="28"
                                 Background="#E2E8F0" Foreground="#1E293B" BorderBrush="#CBD5E1" FontWeight="Bold" Click="BtnPtt_Click"/>
-                        <Button x:Name="BtnTuner" Content="ATU: OFF" Width="88" Height="28"
+                        <Button x:Name="BtnTuner" Grid.Column="2" Content="ATU: OFF" Height="28"
                                 Background="#E2E8F0" Foreground="#1E293B" BorderBrush="#CBD5E1" FontWeight="Bold" Click="BtnTuner_Click"/>
-                    </StackPanel>
-                </StackPanel>
+                    </Grid>
+                </Grid>
             </Border>
         </Grid>
 
