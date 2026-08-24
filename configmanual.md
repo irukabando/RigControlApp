@@ -62,7 +62,7 @@ PCとリグ（トランシーバー）を接続するUSBシリアルポートの
 
 | キー名 | 設定例 | 設定の基準と詳細な役割 |
 | --- | --- | --- |
-| **`Type`** | `ASCII` | 通信プロトコルの種別を指定します。<br><br>**`ASCII`**: テキスト形式のCATコマンド体系。Kenwood 全般、および Yaesu の ASCII CAT 対応機（近年の主要機種）で使用。<br>**`CIV`**: Icom 独自のバイナリパケットフレーム体系。<br>**`YaesuBinary`**: Yaesuの旧型5バイト固定バイナリ体系（FT-1000, FT-1000MP, Mark-V 等）。 |
+| **`Type`** | `Yaesu` | 通信プロトコルの種別を指定します。<br><br>**`Yaesu`**: Yaesu のテキスト形式の CAT コマンド体系。Yaesu の ASCII CAT 対応機（近年の主要機種）で使用。<br>**`Kenwood`**: Kenwood のテキスト形式のコマンド体系。<br>**`CIV` or `Icom`**: Icom 独自のバイナリパケットフレーム体系。<br>**`YaesuBinary`**: Yaesuの旧型5バイト固定バイナリ体系（FT-1000, FT-1000MP, Mark-V 等）。 |
 | **`Terminator`** | `;` | コマンドの終端文字。ASCII CAT では `;` が区切り記号として使用されます（CI-V やバイナリでは不要）。 |
 | **`FreqDigits`** | `11` | **周波数設定コマンドで送信する数値の桁数**。<br><br>リグの世代・機種によりフォーマットが異なります。<br><br>`11`: Kenwood 全般<br>`9`: Yaesu 機(1)（FT-991, FT-710, FTX-1, FTDX101, FTDX10 等）<br>`8`: Yaesu 機(2)（FT-2000, FTDX3000, FTDX5000, FTDX9000 等） |
 | **`CivRigAddress`** | `94` | **Icom 機固有の CI-V アドレス（16進数）**。<br><br>リグ本体のメニュー「CI-V アドレス」と一致させます。<br><br>【代表機種のアドレス例】<br>IC-7300: `94`<br>IC-7610: `98`<br>IC-705: `A4`<br>IC-9700: `A2`<br>IC-7851: `8E` |
@@ -228,7 +228,7 @@ ReadTimeoutMs = 1000
 WriteTimeoutMs = 1000
 
 [PROTOCOL]
-Type = ASCII
+Type = Kenwood
 Terminator = ;
 FreqDigits = 11
 PollIntervalMs = 500
@@ -334,7 +334,7 @@ ReadTimeoutMs = 1000
 WriteTimeoutMs = 1000
 
 [PROTOCOL]
-Type = ASCII
+Type = Yaesu
 Terminator = ;
 FreqDigits = 8
 PollIntervalMs = 500
