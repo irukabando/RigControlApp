@@ -10,7 +10,9 @@ namespace RigControlApp
     /// </summary>
     public enum ProtocolType
     {
-        Ascii,          // Kenwood / Yaesu 新世代 ASCII CAT (例: FA; MD02;)
+        Kenwood,        // Kenwood ASCII CAT (TS-590, TS-890, TS-990 等)
+        Yaesu,          // Yaesu 新世代 ASCII CAT (FTDX101, FT-991A, FTDX10, FT-710 等)
+        Ascii,          // 汎用 ASCII CAT (下位互換用)
         Civ,            // Icom CI-V バイナリ (0xFE 0xFE ...)
         YaesuBinary     // Yaesu 5バイト Binary CAT (FT-1000, FT-1000MP 等)
     }
@@ -32,7 +34,7 @@ namespace RigControlApp
         public int WriteTimeoutMs { get; set; } = 1000;
 
         // --- プロトコル設定 ---
-        public ProtocolType Protocol { get; set; } = ProtocolType.Ascii;
+        public ProtocolType Protocol { get; set; } = ProtocolType.Kenwood;
         public char Terminator { get; set; } = ';';
         public int FreqDigits { get; set; } = 11;
         public byte CivRigAddress { get; set; } = 0x94;
@@ -184,17 +186,25 @@ namespace RigControlApp
         {
             if (key.Equals("Type", StringComparison.OrdinalIgnoreCase))
             {
-                if (Enum.TryParse<ProtocolType>(val, true, out var proto))
+                if (val.Equals("Kenwood", StringComparison.OrdinalIgnoreCase))
                 {
-                    config.Protocol = proto;
+                    config.Protocol = ProtocolType.Kenwood;
                 }
-                else if (val.Equals("CIV", StringComparison.OrdinalIgnoreCase))
+                else if (val.Equals("Yaesu", StringComparison.OrdinalIgnoreCase))
+                {
+                    config.Protocol = ProtocolType.Yaesu;
+                }
+                else if (val.Equals("CIV", StringComparison.OrdinalIgnoreCase) || val.Equals("Icom", StringComparison.OrdinalIgnoreCase))
                 {
                     config.Protocol = ProtocolType.Civ;
                 }
-                else if (val.Contains("Yaesu", StringComparison.OrdinalIgnoreCase) || val.Contains("Binary", StringComparison.OrdinalIgnoreCase))
+                else if (val.Contains("YaesuBinary", StringComparison.OrdinalIgnoreCase) || val.Contains("Binary", StringComparison.OrdinalIgnoreCase))
                 {
                     config.Protocol = ProtocolType.YaesuBinary;
+                }
+                else if (Enum.TryParse<ProtocolType>(val, true, out var proto))
+                {
+                    config.Protocol = proto;
                 }
                 else
                 {

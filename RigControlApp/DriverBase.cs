@@ -190,9 +190,11 @@ namespace RigControlApp
         {
             return config.Protocol switch
             {
+                ProtocolType.Kenwood => new KenwoodCatDriver(config),
+                ProtocolType.Yaesu => new YaesuCatDriver(config),
+                ProtocolType.Ascii => new YaesuCatDriver(config), // 汎用ASCIIはYaesu系CATで処理
                 ProtocolType.Civ => new IcomCivDriver(config),
                 ProtocolType.YaesuBinary => new YaesuBinaryDriver(config),
-                ProtocolType.Ascii => new AsciiCatDriver(config),
                 _ => throw new NotSupportedException($"未対応のプロトコルです: {config.Protocol}")
             };
         }

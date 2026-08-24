@@ -5,7 +5,7 @@ using System.Threading;
 namespace RigControlApp
 {
     /// <summary>
-    /// Icom CI-V バイナリプロトコル向けドライバー
+    /// Icom CI-V バイナリプロトコル向けドライバー (IC-7610, IC-7300, IC-705 等)
     /// </summary>
     public class IcomCivDriver : RigDriverBase
     {
@@ -13,11 +13,13 @@ namespace RigControlApp
 
         private const byte Preamble = 0xFE;
         private const byte EndByte = 0xFD;
+        private const byte NakByte = 0xFA; // CI-V NG/エラー応答
 
         public IcomCivDriver(RigConfig config) : base(config) { }
 
         /// <summary>
         /// CI-V フレームを送信 (FE FE [RigAddr] [CtrlAddr] [Payload...] FD)
+        /// リグから NAK (0xFA) エラーフレームを受信した場合はコンソールに出力
         /// </summary>
         private List<byte> SendFrame(byte[] payload, bool expectReply = true)
         {
@@ -55,7 +57,15 @@ namespace RigControlApp
                                     int endIdx = received.IndexOf(EndByte, i + 4);
                                     if (endIdx != -1)
                                     {
-                                        return received.GetRange(i, endIdx - i + 1);
+                                        var reply = received.GetRange(i, endIdx - i + 1);
+
+                                        // CI-V NAK (0xFA) エラー応答の検出
+                                        if (reply.Count >= 6 && reply[4] == NakByte)
+                                        {
+                                            Console.WriteLine($"[CI-V Error] リグからNAK(0xFA)エラー応答を受信しました: 送信ペイロード={BitConverter.ToString(payload)}");
+                                        }
+
+                                        return reply;
                                     }
                                 }
                             }
