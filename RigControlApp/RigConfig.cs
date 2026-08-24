@@ -10,19 +10,19 @@ namespace RigControlApp
     /// </summary>
     public enum ProtocolType
     {
-        Kenwood,        // Kenwood ASCII CAT (TS-590, TS-890, TS-990 等)
-        Yaesu,          // Yaesu 新世代 ASCII CAT (FTDX101, FT-991A, FTDX10, FT-710 等)
-        Ascii,          // 汎用 ASCII CAT (下位互換用)
+        Kenwood,        // Kenwood ASCII CAT (TS-590, TS-890, TS-990 など)
+        Yaesu,          // Yaesu 新型 ASCII CAT (FTDX101, FT-991A, FTDX10, FT-710 など)
+        Ascii,          // 汎用 ASCII CAT
         Civ,            // Icom CI-V バイナリ (0xFE 0xFE ...)
-        YaesuBinary     // Yaesu 5バイト Binary CAT (FT-1000, FT-1000MP 等)
+        YaesuBinary     // Yaesu 5バイト Binary CAT (FT-1000, FT-1000MP など)
     }
 
     /// <summary>
-    /// リグ接続設定クラス
+    /// リグ設定保持クラス
     /// </summary>
     public class RigConfig
     {
-        // --- シリアルポート設定 ---
+        // --- シリアル通信設定 ---
         public string PortName { get; set; } = "COM3";
         public int BaudRate { get; set; } = 38400;
         public int DataBits { get; set; } = 8;
@@ -33,7 +33,7 @@ namespace RigControlApp
         public int ReadTimeoutMs { get; set; } = 1000;
         public int WriteTimeoutMs { get; set; } = 1000;
 
-        // --- プロトコル設定 ---
+        // --- プロトコル共通設定 ---
         public ProtocolType Protocol { get; set; } = ProtocolType.Kenwood;
         public char Terminator { get; set; } = ';';
         public int FreqDigits { get; set; } = 11;
@@ -41,13 +41,8 @@ namespace RigControlApp
         public byte CivControllerAddress { get; set; } = 0xE0;
         public int PollIntervalMs { get; set; } = 500;
 
-        // --- メーター最大値設定 ---
-        public int SMeterMax { get; set; } = 255;
-        public int PowerMeterMax { get; set; } = 255;
-        public int SwrMeterMax { get; set; } = 255;
-        public int AlcMeterMax { get; set; } = 255;
-
-        // --- マッピング設定 (.ini からロード) ---
+        // --- マップ設定 (.ini から動的読み込み) ---
+        public Dictionary<string, string> Meters { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> Commands { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> ModeMap { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> Bands { get; } = new(StringComparer.OrdinalIgnoreCase);
@@ -55,11 +50,11 @@ namespace RigControlApp
         public Dictionary<string, string> Filters { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
-        /// .ini ファイルから設定を読み込む
+        /// .ini ファイルから設定をロード
         /// </summary>
         public static RigConfig LoadFromFile(string filePath)
         {
-            // 相対パス・絶対パスの解決
+            // 設定ファイルの検索
             if (!File.Exists(filePath))
             {
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -93,7 +88,7 @@ namespace RigControlApp
 
                 if (!found)
                 {
-                    throw new FileNotFoundException($"設定ファイルが見つかりません: {filePath}\n検索ベースディレクトリ: {baseDir}");
+                    throw new FileNotFoundException($"設定ファイルが見つかりません: {filePath}\n探索先: {baseDir}");
                 }
             }
 
@@ -104,25 +99,25 @@ namespace RigControlApp
             {
                 string line = rawLine.Trim();
 
-                // コメント行 (#, ;) および空行のスキップ
+                // コメント・空行スキップ (#, ;)
                 if (string.IsNullOrEmpty(line) || line.StartsWith("#") || line.StartsWith(";"))
                     continue;
 
-                // セクションヘッダー
+                // セクションヘッダ
                 if (line.StartsWith("[") && line.EndsWith("]"))
                 {
                     currentSection = line[1..^1].Trim().ToUpperInvariant();
                     continue;
                 }
 
-                // キー=値 の分割
+                // キー = 値 のパース
                 int eqIdx = line.IndexOf('=');
                 if (eqIdx <= 0) continue;
 
                 string key = line[..eqIdx].Trim();
                 string val = line[(eqIdx + 1)..].Trim();
 
-                // インラインコメント (#) の除去
+                // 行末コメント除去 (#)
                 int commentIdx = val.IndexOf('#');
                 if (commentIdx >= 0)
                 {
@@ -138,7 +133,8 @@ namespace RigControlApp
                         ParseProtocolConfig(config, key, val);
                         break;
                     case "METERS":
-                        ParseMetersConfig(config, key, val);
+                    case "METER":
+                        config.Meters[key] = val;
                         break;
                     case "COMMANDS":
                         config.Commands[key] = val;
@@ -231,17 +227,6 @@ namespace RigControlApp
             {
                 config.PollIntervalMs = Math.Max(50, pi);
             }
-        }
-
-        /// <summary>
-        /// [METERS] セクションのパース
-        /// </summary>
-        private static void ParseMetersConfig(RigConfig config, string key, string val)
-        {
-            if (key.Equals("SMeterMax", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int sm)) config.SMeterMax = sm;
-            else if (key.Equals("PowerMeterMax", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int pm)) config.PowerMeterMax = pm;
-            else if (key.Equals("SwrMeterMax", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int swr)) config.SwrMeterMax = swr;
-            else if (key.Equals("AlcMeterMax", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int alc)) config.AlcMeterMax = alc;
         }
     }
 }

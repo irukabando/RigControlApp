@@ -14,7 +14,7 @@ namespace RigControlApp
     }
 
     /// <summary>
-    /// リグ制御ドライバー共通インターフェース
+    /// リグ制御ドライバ共通インターフェース
     /// </summary>
     public interface IRigDriver : IDisposable
     {
@@ -25,40 +25,30 @@ namespace RigControlApp
 
         long GetFrequency(VfoType vfo);
         void SetFrequency(VfoType vfo, long freqHz);
-
         string GetMode(VfoType vfo);
         void SetMode(VfoType vfo, string modeName);
-
         void SelectVfo(VfoType vfo);
         void SelectBand(VfoType vfo, string bandKey);
-
-        string GetAntenna(VfoType vfo); // アンテナ状態取得
+        string GetAntenna(VfoType vfo);
         void SetAntenna(VfoType vfo, string antennaIndex);
-
         void SetPtt(bool txOn);
-        bool GetPtt();                   // 追加: PTT状態取得
-
-        bool GetTuner();                 // アンテナチューナー状態取得
-        void SetTuner(bool tunerOn);     // チューナー ON/OFF
-
-        string GetBandwidth(VfoType vfo); // フィルタ帯域幅取得
-        void SetBandwidth(VfoType vfo, string bandwidthKey); // フィルタ帯域幅設定
-
+        bool GetPtt();
+        bool GetTuner();
+        void SetTuner(bool tunerOn);
+        string GetBandwidth(VfoType vfo);
+        void SetBandwidth(VfoType vfo, string bandwidthKey);
         string GetRigState();
-
         int GetSMeter();
-        int GetPowerMeter();             // 追加: Power メーター
-        int GetSwrMeter();               // 追加: SWR メーター
-        int GetAlcMeter();               // 追加: ALC メーター
-
+        int GetPowerMeter();
+        int GetSwrMeter();
+        int GetAlcMeter();
         int GetAfGain();
         void SetAfGain(int gainValue);
-
         string SendRawCommand(string rawInput);
     }
 
     /// <summary>
-    /// リグドライバー基底抽象クラス
+    /// リグ制御ドライバ基底クラス
     /// </summary>
     public abstract class RigDriverBase : IRigDriver
     {
@@ -147,13 +137,12 @@ namespace RigControlApp
         }
 
         /// <summary>
-        /// 機種固有の最大値から UI用の 0〜255 スケールに正規化
+        /// 生メータ値を 0-255 の範囲に正規化
         /// </summary>
         protected static int NormalizeMeterValue(int rawVal, int maxVal)
         {
             if (maxVal <= 0 || rawVal <= 0) return 0;
             if (maxVal == 255) return Math.Clamp(rawVal, 0, 255);
-
             int normalized = (int)Math.Round((double)rawVal * 255.0 / maxVal);
             return Math.Clamp(normalized, 0, 255);
         }
@@ -182,7 +171,7 @@ namespace RigControlApp
     }
 
     /// <summary>
-    /// ドライバー生成ファクトリ
+    /// ドライバ生成ファクトリ
     /// </summary>
     public static class RigDriverFactory
     {
@@ -192,7 +181,7 @@ namespace RigControlApp
             {
                 ProtocolType.Kenwood => new KenwoodCatDriver(config),
                 ProtocolType.Yaesu => new YaesuCatDriver(config),
-                ProtocolType.Ascii => new YaesuCatDriver(config), // 汎用ASCIIはYaesu系CATで処理
+                ProtocolType.Ascii => new YaesuCatDriver(config), // 汎用 ASCII は Yaesu 互換
                 ProtocolType.Civ => new IcomCivDriver(config),
                 ProtocolType.YaesuBinary => new YaesuBinaryDriver(config),
                 _ => throw new NotSupportedException($"未対応のプロトコルです: {config.Protocol}")

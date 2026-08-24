@@ -4,7 +4,7 @@ using System.Threading;
 namespace RigControlApp
 {
     /// <summary>
-    /// Yaesu 5-Byte Binary CAT プロトコル向けドライバー (FT-1000, FT-1000MP, Mark-V 等)
+    /// Yaesu 5-Byte Binary CAT ドライバ (FT-1000, FT-1000MP, Mark-V など)
     /// </summary>
     public class YaesuBinaryDriver : RigDriverBase
     {
@@ -39,13 +39,14 @@ namespace RigControlApp
                 try
                 {
                     Port!.DiscardInBuffer();
-                    // ステータス更新要求: 00 00 00 03 10
+                    // オペレーティングデータ要求: 00 00 00 03 10
                     byte[] request = { 0x00, 0x00, 0x00, 0x03, 0x10 };
                     Port.Write(request, 0, request.Length);
 
                     byte[] buf = new byte[32];
                     int read = 0;
                     int elapsed = 0;
+
                     while (read < 32 && elapsed < 200)
                     {
                         if (Port.BytesToRead > 0)
@@ -190,15 +191,10 @@ namespace RigControlApp
         }
 
         public override bool GetPtt() => false;
-
         public override bool GetTuner() => false;
-
         public override void SetTuner(bool tunerOn) { }
-
         public override string GetBandwidth(VfoType vfo) => string.Empty;
-
         public override void SetBandwidth(VfoType vfo, string bandwidthKey) { }
-
         public override string GetRigState() => $"Freq: {_cachedFreqA} Hz, Mode: {_cachedMode}";
 
         public override int GetSMeter()
@@ -206,7 +202,6 @@ namespace RigControlApp
             lock (SyncLock)
             {
                 if (!IsOpen) return 0;
-
                 try
                 {
                     Port!.DiscardInBuffer();
@@ -216,6 +211,7 @@ namespace RigControlApp
                     byte[] buf = new byte[5];
                     int read = 0;
                     int elapsed = 0;
+
                     while (read < 5 && elapsed < 100)
                     {
                         if (Port.BytesToRead > 0)
@@ -227,7 +223,11 @@ namespace RigControlApp
                         }
                     }
 
-                    if (read >= 1) return NormalizeMeterValue(buf[0], Config.SMeterMax);
+                    if (read >= 1)
+                    {
+                        int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("SMeter", "255"), out int max) ? max : 255;
+                        return NormalizeMeterValue(buf[0], maxVal);
+                    }
                 }
                 catch { }
 
@@ -236,13 +236,9 @@ namespace RigControlApp
         }
 
         public override int GetPowerMeter() => 0;
-
         public override int GetSwrMeter() => 0;
-
         public override int GetAlcMeter() => 0;
-
         public override int GetAfGain() => 0;
-
         public override void SetAfGain(int gainValue) { }
 
         public override string SendRawCommand(string raw)

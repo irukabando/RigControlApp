@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace RigControlApp
 {
     /// <summary>
-    /// Yaesu 新世代 ASCII CAT コマンド体系 (FTDX101, FT-991A, FTDX10, FT-710 等) 向けドライバー
+    /// Yaesu 新型 ASCII CAT (FTDX101, FT-991A, FTDX10, FT-710 など)
     /// </summary>
     public class YaesuCatDriver : AsciiCatDriverBase
     {
@@ -17,8 +17,7 @@ namespace RigControlApp
             string defaultCmd = vfo == VfoType.VfoA ? "MD0;" : "MD1;";
             string cmd = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("MD_GET", defaultCmd));
             string resp = ExecuteCommand(cmd);
-
-            // コマンドプレフィックスを動的に除去 (例: "MD0" を除去して "2" や "C" を抽出)
+            // 応答例: "MD02;" -> "2" または "C"
             string code = StripCommandPrefix(resp, cmd);
 
             foreach (var kvp in Config.ModeMap)
@@ -29,7 +28,6 @@ namespace RigControlApp
                     return kvp.Key;
                 }
             }
-
             return string.IsNullOrEmpty(code) ? "Unknown" : $"Mode {code}";
         }
 
@@ -70,7 +68,7 @@ namespace RigControlApp
                     }
                     else
                     {
-                        // Yaesu BS コマンド (例: BS05; で 14MHz帯)
+                        // Yaesu BS コマンド: BS05; で 14MHz
                         string cmd = string.Format(tmpl, bandVal);
                         ExecuteCommand(cmd, expectResponse: false);
                     }
@@ -99,8 +97,7 @@ namespace RigControlApp
 
             if (data.Length > 0)
             {
-                string antCode = data[0].ToString(); // P2 (先頭1文字) をアンテナ番号として取得
-
+                string antCode = data[0].ToString(); // P2 (アンテナ番号)
                 foreach (var kvp in Config.Antennas)
                 {
                     if (kvp.Value.Equals(antCode, StringComparison.OrdinalIgnoreCase))
@@ -112,13 +109,12 @@ namespace RigControlApp
                 }
                 return antCode;
             }
-
             return string.Empty;
         }
 
         public override void SetAntenna(VfoType vfo, string antennaIndex)
         {
-            // Yaesu AN 設定: AN[P1][P2]; (P1: 0=MAIN, 1=SUB / P2: 1~3)
+            // Yaesu AN コマンド: AN[P1][P2]; (P1: 0=MAIN, 1=SUB / P2: 1~3)
             string antCode = Config.Antennas.GetValueOrDefault(antennaIndex, antennaIndex);
             string key = vfo == VfoType.VfoA ? "ANT_SET_A" : "ANT_SET_B";
             string defaultTmpl = vfo == VfoType.VfoA ? "AN0{0};" : "AN1{0};";
@@ -129,21 +125,19 @@ namespace RigControlApp
 
         public override void SetPtt(bool txOn)
         {
-            // Yaesu TX 設定: TX1; (CAT TX ON), TX0; (TX OFF)
+            // Yaesu TX コマンド: TX1; (CAT TX ON), TX0; (TX OFF)
             string cmd = txOn
                 ? Config.Commands.GetValueOrDefault("TX_ON", "TX1;")
                 : Config.Commands.GetValueOrDefault("TX_OFF", "TX0;");
-
             ExecuteCommand(cmd, expectResponse: false);
         }
 
         public override bool GetPtt()
         {
-            // Yaesu TX 読出: TX; -> TX[P1]; (0=OFF, 1=ON, 2=ON)
+            // Yaesu TX コマンド: TX; -> TX[P1]; (0=OFF, 1=ON, 2=ON)
             string cmd = Config.Commands.GetValueOrDefault("TX_GET", "TX;");
             string resp = ExecuteCommand(cmd);
             string data = StripCommandPrefix(resp, cmd);
-
             return data == "1" || data == "2";
         }
 
@@ -154,7 +148,7 @@ namespace RigControlApp
                 return false;
             }
 
-            // Yaesu AC 読出: AC; -> AC[P1][P2][P3]; (P3: 0=OFF, 1=ON, 2=Tuning)
+            // Yaesu AC コマンド: AC; -> AC[P1][P2][P3]; (P3: 0=OFF, 1=ON, 2=Tuning)
             string cmd = Config.Commands.GetValueOrDefault("TUNER_GET", "AC;");
             string resp = ExecuteCommand(cmd);
             string data = StripCommandPrefix(resp, cmd);
@@ -168,7 +162,7 @@ namespace RigControlApp
 
         public override void SetTuner(bool tunerOn)
         {
-            // Yaesu AC 設定: AC001; (ON), AC000; (OFF), AC002; (Tune)
+            // Yaesu AC コマンド: AC001; (ON), AC000; (OFF), AC002; (Tune)
             string cmd;
             if (tunerOn)
             {
@@ -183,7 +177,6 @@ namespace RigControlApp
             {
                 cmd = string.Format(tmpl, tunerOn ? "001" : "000");
             }
-
             ExecuteCommand(cmd, expectResponse: false);
         }
 
@@ -204,7 +197,6 @@ namespace RigControlApp
                     return kvp.Key;
                 }
             }
-
             return code;
         }
 
@@ -224,7 +216,6 @@ namespace RigControlApp
             {
                 cmd = string.Format(tmpl, bwCode);
             }
-
             ExecuteCommand(cmd, expectResponse: false);
         }
 
@@ -234,54 +225,55 @@ namespace RigControlApp
             string cmd = Config.Commands.GetValueOrDefault("SM_GET", "SM0;");
             string resp = ExecuteCommand(cmd);
             string data = StripCommandPrefix(resp, cmd);
-
             if (int.TryParse(data, out int val))
             {
-                return NormalizeMeterValue(val, Config.SMeterMax);
+                int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("SMeter", "255"), out int max) ? max : 255;
+                return NormalizeMeterValue(val, maxVal);
             }
             return 0;
         }
 
         public override int GetPowerMeter()
         {
-            // Yaesu RM5; (POW) -> RM5[3桁P2][3桁固定000];
+            // Yaesu RM5; (POW) -> RM5[3桁 P2][3桁 000];
             string cmd = Config.Commands.GetValueOrDefault("PO_GET", "RM5;");
             string resp = ExecuteCommand(cmd);
             int rawVal = ParseYaesuReadMeter(resp, cmd);
-            return NormalizeMeterValue(rawVal, Config.PowerMeterMax);
+            int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("PowerMeter", "255"), out int max) ? max : 255;
+            return NormalizeMeterValue(rawVal, maxVal);
         }
 
         public override int GetSwrMeter()
         {
-            // Yaesu RM6; (SWR) -> RM6[3桁P2][3桁固定000];
+            // Yaesu RM6; (SWR) -> RM6[3桁 P2][3桁 000];
             string cmd = Config.Commands.GetValueOrDefault("SWR_GET", "RM6;");
             string resp = ExecuteCommand(cmd);
             int rawVal = ParseYaesuReadMeter(resp, cmd);
-            return NormalizeMeterValue(rawVal, Config.SwrMeterMax);
+            int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("SwrMeter", "255"), out int max) ? max : 255;
+            return NormalizeMeterValue(rawVal, maxVal);
         }
 
         public override int GetAlcMeter()
         {
-            // Yaesu RM4; (ALC) -> RM4[3桁P2][3桁固定000];
+            // Yaesu RM4; (ALC) -> RM4[3桁 P2][3桁 000];
             string cmd = Config.Commands.GetValueOrDefault("ALC_GET", "RM4;");
             string resp = ExecuteCommand(cmd);
             int rawVal = ParseYaesuReadMeter(resp, cmd);
-            return NormalizeMeterValue(rawVal, Config.AlcMeterMax);
+            int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("AlcMeter", "255"), out int max) ? max : 255;
+            return NormalizeMeterValue(rawVal, maxVal);
         }
 
         /// <summary>
-        /// Yaesu RM コマンドの 6 桁応答 (P2: 3桁メーター値 + P3: 3桁固定値000) からメーター値を抽出
+        /// Yaesu RM 応答のパース (P2: 3桁 メータ値 + P3: 3桁 000)
         /// </summary>
         private int ParseYaesuReadMeter(string resp, string sentCmd)
         {
             string data = StripCommandPrefix(resp, sentCmd);
-
-            // 6 桁ある場合は先頭 3 桁 (P2: メーター値) のみを抽出
+            // 6桁応答の場合 (P2: メータ値のみ取得)
             if (data.Length >= 6)
             {
                 data = data[..3];
             }
-
             if (int.TryParse(data, out int val))
             {
                 return val;
@@ -295,7 +287,6 @@ namespace RigControlApp
             string cmd = Config.Commands.GetValueOrDefault("AG_GET", "AG0;");
             string resp = ExecuteCommand(cmd);
             string data = StripCommandPrefix(resp, cmd);
-
             if (int.TryParse(data, out int val))
             {
                 return val;

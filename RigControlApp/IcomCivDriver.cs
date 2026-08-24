@@ -5,7 +5,7 @@ using System.Threading;
 namespace RigControlApp
 {
     /// <summary>
-    /// Icom CI-V バイナリプロトコル向けドライバー (IC-7610, IC-7300, IC-705 等)
+    /// Icom CI-V ドライバ (IC-7610, IC-7300, IC-705 など)
     /// </summary>
     public class IcomCivDriver : RigDriverBase
     {
@@ -18,8 +18,8 @@ namespace RigControlApp
         public IcomCivDriver(RigConfig config) : base(config) { }
 
         /// <summary>
-        /// CI-V フレームを送信 (FE FE [RigAddr] [CtrlAddr] [Payload...] FD)
-        /// リグから NAK (0xFA) エラーフレームを受信した場合はコンソールに出力
+        /// CI-V フレーム送信 (FE FE [RigAddr] [CtrlAddr] [Payload...] FD)
+        /// 受信時に NAK (0xFA) を検出した場合はログ出力
         /// </summary>
         private List<byte> SendFrame(byte[] payload, bool expectReply = true)
         {
@@ -33,7 +33,6 @@ namespace RigControlApp
                 frame.Add(EndByte);
 
                 Port.Write(frame.ToArray(), 0, frame.Count);
-
                 if (!expectReply) return new List<byte>();
 
                 var received = new List<byte>();
@@ -58,13 +57,11 @@ namespace RigControlApp
                                     if (endIdx != -1)
                                     {
                                         var reply = received.GetRange(i, endIdx - i + 1);
-
-                                        // CI-V NAK (0xFA) エラー応答の検出
+                                        // CI-V NAK (0xFA) 検出
                                         if (reply.Count >= 6 && reply[4] == NakByte)
                                         {
-                                            Console.WriteLine($"[CI-V Error] リグからNAK(0xFA)エラー応答を受信しました: 送信ペイロード={BitConverter.ToString(payload)}");
+                                            Console.WriteLine($"[CI-V Error] 応答 NAK(0xFA) 送信={BitConverter.ToString(payload)}");
                                         }
-
                                         return reply;
                                     }
                                 }
@@ -76,7 +73,6 @@ namespace RigControlApp
                         Thread.Sleep(5);
                     }
                 }
-
                 return received;
             }
         }
@@ -106,7 +102,6 @@ namespace RigControlApp
                 {
                     byte modeByte = reply[cmdIdx + 1];
                     string hex = modeByte.ToString("X2");
-
                     foreach (var kvp in Config.ModeMap)
                     {
                         if (kvp.Value.Equals(hex, StringComparison.OrdinalIgnoreCase))
@@ -149,7 +144,7 @@ namespace RigControlApp
 
                 if (!string.IsNullOrEmpty(tmpl))
                 {
-                    // CI-V の独自バンド選択コマンド (01 [BandCode]) を送信
+                    // CI-V バンドスタック切替 (01 [BandCode])
                     SendRawCommand(string.Format(tmpl, bandVal));
                 }
                 else if (long.TryParse(bandVal, out long freqHz))
@@ -165,10 +160,9 @@ namespace RigControlApp
 
         public override string GetAntenna(VfoType vfo)
         {
-            // CI-V アンテナ状態問い合わせコマンド (0x12) を送信
+            // CI-V アンテナ設定読み出し (0x12)
             var reply = SendFrame(new byte[] { 0x12 });
-
-            // 受信フレーム検証: [FE FE TO FROM 12 (ANT) ...]
+            // 例: [FE FE TO FROM 12 (ANT) ...]
             if (reply.Count >= 6)
             {
                 int cmdIdx = 4;
@@ -178,7 +172,7 @@ namespace RigControlApp
                     string codeHex = antByte.ToString("X2"); // "00", "01", ...
                     string codeDec = antByte.ToString();     // "0", "1", ...
 
-                    // [ANTENNAS] マッピングがある場合は逆引き (例: 1=0 や ANT_1=00)
+                    // [ANTENNAS] から設定値を検索 (例: 1=0 または ANT_1=00)
                     foreach (var kvp in Config.Antennas)
                     {
                         if (kvp.Value.Equals(codeHex, StringComparison.OrdinalIgnoreCase) ||
@@ -190,12 +184,10 @@ namespace RigControlApp
                                 : kvp.Key;
                         }
                     }
-
-                    // マッピング未定義時は 0-based (0x00) を 1-based ("1", "2"...) に変換して返却
+                    // 設定がない場合は 0-based (0x00) を 1-based ("1", "2"...) に変換
                     return (antByte + 1).ToString();
                 }
             }
-
             return string.Empty;
         }
 
@@ -246,7 +238,6 @@ namespace RigControlApp
             {
                 int bw = BcdByteToInt(reply[6]) * 50;
                 string code = bw.ToString();
-
                 foreach (var kvp in Config.Filters)
                 {
                     if (kvp.Value.Equals(code, StringComparison.OrdinalIgnoreCase) ||
@@ -290,7 +281,8 @@ namespace RigControlApp
                 int val1 = BcdByteToInt(reply[6]);
                 int val2 = BcdByteToInt(reply[7]);
                 int raw = val1 * 100 + val2;
-                return NormalizeMeterValue(raw, Config.SMeterMax);
+                int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("SMeter", "255"), out int max) ? max : 255;
+                return NormalizeMeterValue(raw, maxVal);
             }
             return 0;
         }
@@ -303,7 +295,8 @@ namespace RigControlApp
                 int val1 = BcdByteToInt(reply[6]);
                 int val2 = BcdByteToInt(reply[7]);
                 int raw = val1 * 100 + val2;
-                return NormalizeMeterValue(raw, Config.PowerMeterMax);
+                int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("PowerMeter", "255"), out int max) ? max : 255;
+                return NormalizeMeterValue(raw, maxVal);
             }
             return 0;
         }
@@ -316,7 +309,8 @@ namespace RigControlApp
                 int val1 = BcdByteToInt(reply[6]);
                 int val2 = BcdByteToInt(reply[7]);
                 int raw = val1 * 100 + val2;
-                return NormalizeMeterValue(raw, Config.SwrMeterMax);
+                int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("SwrMeter", "255"), out int max) ? max : 255;
+                return NormalizeMeterValue(raw, maxVal);
             }
             return 0;
         }
@@ -329,7 +323,8 @@ namespace RigControlApp
                 int val1 = BcdByteToInt(reply[6]);
                 int val2 = BcdByteToInt(reply[7]);
                 int raw = val1 * 100 + val2;
-                return NormalizeMeterValue(raw, Config.AlcMeterMax);
+                int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("AlcMeter", "255"), out int max) ? max : 255;
+                return NormalizeMeterValue(raw, maxVal);
             }
             return 0;
         }

@@ -132,7 +132,7 @@ namespace RigControlApp
                 BtnConnect.Content = "接続";
                 BtnConnect.Background = new SolidColorBrush(Color.FromRgb(2, 132, 199));
                 LedStatus.Fill = new SolidColorBrush(Color.FromRgb(148, 163, 184));
-                TxtStatus.Text = "切断";
+                TxtStatus.Text = "未接続";
                 AppendLog("リグから切断しました。");
                 return;
             }

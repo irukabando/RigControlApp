@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace RigControlApp
 {
     /// <summary>
-    /// Kenwood TS-590 / TS-890 / TS-990 シリーズ向け CAT ドライバー
+    /// Kenwood TS-590 / TS-890 / TS-990 向け CAT ドライバ
     /// </summary>
     public class KenwoodCatDriver : AsciiCatDriverBase
     {
@@ -16,8 +16,7 @@ namespace RigControlApp
             string defaultCmd = "MD;";
             string cmd = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("MD_GET", defaultCmd));
             string resp = ExecuteCommand(cmd);
-
-            // コマンドプレフィックスを動的に除去 (例: "MD1;" -> "1")
+            // 応答例: "MD1;" -> "1"
             string code = StripCommandPrefix(resp, cmd);
 
             foreach (var kvp in Config.ModeMap)
@@ -28,7 +27,6 @@ namespace RigControlApp
                     return kvp.Key;
                 }
             }
-
             return string.IsNullOrEmpty(code) ? "Unknown" : $"Mode {code}";
         }
 
@@ -45,7 +43,7 @@ namespace RigControlApp
 
         public override void SelectVfo(VfoType vfo)
         {
-            // Kenwood は受信・送信 VFO を FR/FT で切り替える (0=VFO-A, 1=VFO-B)
+            // Kenwood は送受信 VFO を FR/FT で切替 (0=VFO-A, 1=VFO-B)
             string key = vfo == VfoType.VfoA ? "VFO_A" : "VFO_B";
             string defaultCmd = vfo == VfoType.VfoA ? "FR0;FT0;" : "FR1;FT1;";
             string cmd = Config.Commands.GetValueOrDefault(key, defaultCmd);
@@ -68,7 +66,7 @@ namespace RigControlApp
                     }
                     else
                     {
-                        // Kenwood の BD/BU コマンド等 (例: BD04;)
+                        // Kenwood 直接 BD/BU コマンド等 (例: BD04;)
                         string cmd = string.Format(tmpl, bandVal);
                         ExecuteCommand(cmd, expectResponse: false);
                     }
@@ -86,7 +84,7 @@ namespace RigControlApp
 
         public override string GetAntenna(VfoType vfo)
         {
-            // Kenwood ANコマンド: 応答 AN[P1][P2][P3]; (P1: 1=ANT1, 2=ANT2)
+            // Kenwood AN コマンド: AN[P1][P2][P3]; (P1: 1=ANT1, 2=ANT2)
             string key = vfo == VfoType.VfoA ? "ANT_GET_A" : "ANT_GET_B";
             string defaultCmd = "AN;";
             string cmd = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("ANT_GET", defaultCmd));
@@ -97,8 +95,7 @@ namespace RigControlApp
 
             if (data.Length > 0)
             {
-                string antCode = data[0].ToString(); // 先頭 1 文字が ANT 番号 (1 または 2)
-
+                string antCode = data[0].ToString(); // 1文字目が ANT 番号 (1 または 2)
                 foreach (var kvp in Config.Antennas)
                 {
                     if (kvp.Value.Equals(antCode, StringComparison.OrdinalIgnoreCase))
@@ -110,13 +107,12 @@ namespace RigControlApp
                 }
                 return antCode;
             }
-
             return string.Empty;
         }
 
         public override void SetAntenna(VfoType vfo, string antennaIndex)
         {
-            // Kenwood AN設定: AN[P1]99; (P1: 1=ANT1, 2=ANT2, 9=変更なし)
+            // Kenwood AN 設定: AN[P1]99; (P1: 1=ANT1, 2=ANT2, 9=受信専用ANT等)
             string antCode = Config.Antennas.GetValueOrDefault(antennaIndex, antennaIndex);
             string key = vfo == VfoType.VfoA ? "ANT_SET_A" : "ANT_SET_B";
             string tmpl = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("ANT_SET", "AN{0}99;"));
@@ -126,17 +122,16 @@ namespace RigControlApp
 
         public override void SetPtt(bool txOn)
         {
-            // Kenwood は TX; で送信、RX; で受信
+            // Kenwood コマンド: TX; または RX;
             string cmd = txOn
                 ? Config.Commands.GetValueOrDefault("TX_ON", "TX;")
                 : Config.Commands.GetValueOrDefault("TX_OFF", "RX;");
-
             ExecuteCommand(cmd, expectResponse: false);
         }
 
         public override bool GetPtt()
         {
-            // Kenwood は IF; コマンドの 28 桁目 (0-indexed: 28) で TX (1) / RX (0) を判定
+            // Kenwood 状態取得 IF; の 29文字目 (0-indexed: 28) が TX (1) / RX (0)
             string cmd = Config.Commands.GetValueOrDefault("TX_GET", "IF;");
             string resp = ExecuteCommand(cmd).TrimEnd(Config.Terminator);
 
@@ -159,14 +154,14 @@ namespace RigControlApp
                 return false;
             }
 
-            // Kenwood AC 応答: AC[P1][P2][P3]; (P2: 0=THRU, 1=IN)
+            // Kenwood AC コマンド: AC[P1][P2][P3]; (P2: 0=THRU, 1=IN)
             string cmd = Config.Commands.GetValueOrDefault("TUNER_GET", "AC;");
             string resp = ExecuteCommand(cmd);
             string data = StripCommandPrefix(resp, cmd);
 
             if (data.Length >= 2)
             {
-                return data[1] == '1'; // TX-AT が IN かどうか
+                return data[1] == '1'; // TX-AT が IN
             }
             return false;
         }
@@ -176,18 +171,17 @@ namespace RigControlApp
             string cmd;
             if (tunerOn)
             {
-                cmd = Config.Commands.GetValueOrDefault("TUNER_ON", "AC111;"); // チューン開始
+                cmd = Config.Commands.GetValueOrDefault("TUNER_ON", "AC111;"); // チューナー稼働
             }
             else
             {
-                cmd = Config.Commands.GetValueOrDefault("TUNER_OFF", "AC000;"); // チューナー OFF
+                cmd = Config.Commands.GetValueOrDefault("TUNER_OFF", "AC000;"); // スルー / OFF
             }
 
             if (Config.Commands.TryGetValue("TUNER_SET", out var tmpl))
             {
                 cmd = string.Format(tmpl, tunerOn ? "111" : "000");
             }
-
             ExecuteCommand(cmd, expectResponse: false);
         }
 
@@ -208,7 +202,6 @@ namespace RigControlApp
                     return kvp.Key;
                 }
             }
-
             return code;
         }
 
@@ -228,7 +221,6 @@ namespace RigControlApp
             {
                 cmd = string.Format(tmpl, bwCode);
             }
-
             ExecuteCommand(cmd, expectResponse: false);
         }
 
@@ -238,16 +230,18 @@ namespace RigControlApp
             string cmd = Config.Commands.GetValueOrDefault("SM_GET", "SM0;");
             string resp = ExecuteCommand(cmd);
             int rawVal = ParseKenwoodMeter(resp, cmd);
-            return NormalizeMeterValue(rawVal, Config.SMeterMax);
+            int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("SMeter", "30"), out int max) ? max : 30;
+            return NormalizeMeterValue(rawVal, maxVal);
         }
 
         public override int GetPowerMeter()
         {
-            // Kenwood は送信時に SM0; で PO メーター (0000~0030) を出力
+            // Kenwood 送信時 SM0; は PO 表示 (0000~0030)
             string cmd = Config.Commands.GetValueOrDefault("PO_GET", "SM0;");
             string resp = ExecuteCommand(cmd);
             int rawVal = ParseKenwoodMeter(resp, cmd);
-            return NormalizeMeterValue(rawVal, Config.PowerMeterMax);
+            int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("PowerMeter", "30"), out int max) ? max : 30;
+            return NormalizeMeterValue(rawVal, maxVal);
         }
 
         public override int GetSwrMeter()
@@ -256,7 +250,8 @@ namespace RigControlApp
             string cmd = Config.Commands.GetValueOrDefault("SWR_GET", "RM1;");
             string resp = ExecuteCommand(cmd);
             int rawVal = ParseKenwoodMeter(resp, cmd);
-            return NormalizeMeterValue(rawVal, Config.SwrMeterMax);
+            int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("SwrMeter", "30"), out int max) ? max : 30;
+            return NormalizeMeterValue(rawVal, maxVal);
         }
 
         public override int GetAlcMeter()
@@ -265,7 +260,8 @@ namespace RigControlApp
             string cmd = Config.Commands.GetValueOrDefault("ALC_GET", "RM3;");
             string resp = ExecuteCommand(cmd);
             int rawVal = ParseKenwoodMeter(resp, cmd);
-            return NormalizeMeterValue(rawVal, Config.AlcMeterMax);
+            int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("AlcMeter", "30"), out int max) ? max : 30;
+            return NormalizeMeterValue(rawVal, maxVal);
         }
 
         private int ParseKenwoodMeter(string resp, string sentCmd)
@@ -284,7 +280,6 @@ namespace RigControlApp
             string cmd = Config.Commands.GetValueOrDefault("AG_GET", "AG0;");
             string resp = ExecuteCommand(cmd);
             string data = StripCommandPrefix(resp, cmd);
-
             if (int.TryParse(data, out int val))
             {
                 return val;
