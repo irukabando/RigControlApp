@@ -7,6 +7,14 @@
 		<ImplicitUsings>enable</ImplicitUsings>
 		<UseWPF>true</UseWPF>
 		<ApplicationIcon>orca_icon.ico</ApplicationIcon>
+		
+		<!-- 自己完結 & 単一ファイル設定 -->
+		<RuntimeIdentifier>win-x64</RuntimeIdentifier>
+		<SelfContained>true</SelfContained>
+		<PublishSingleFile>true</PublishSingleFile>
+		<!-- ネイティブDLL等の抽出をメモリ内で完結させる設定 -->
+		<IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+		
 	</PropertyGroup>
 
 	<ItemGroup>

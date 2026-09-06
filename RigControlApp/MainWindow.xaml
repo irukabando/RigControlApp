@@ -62,17 +62,23 @@
 
         <!-- 1. 接続バー -->
         <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Padding="10,6" Margin="0,0,0,8">
-            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                <TextBlock Text="設定:" VerticalAlignment="Center" Margin="0,0,6,0" FontWeight="SemiBold"/>
-                <ComboBox x:Name="CmbConfig" Width="140" Height="28" Margin="0,0,12,0"/>
+            <DockPanel LastChildFill="False">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" DockPanel.Dock="Left">
+                    <TextBlock Text="設定:" VerticalAlignment="Center" Margin="0,0,6,0" FontWeight="SemiBold"/>
+                    <ComboBox x:Name="CmbConfig" Width="140" Height="28" Margin="0,0,12,0"/>
 
-                <TextBlock Text="COM:" VerticalAlignment="Center" Margin="0,0,6,0" FontWeight="SemiBold"/>
-                <ComboBox x:Name="CmbPort" Width="85" Height="28" Margin="0,0,12,0"/>
+                    <TextBlock Text="COM:" VerticalAlignment="Center" Margin="0,0,6,0" FontWeight="SemiBold"/>
+                    <ComboBox x:Name="CmbPort" Width="85" Height="28" Margin="0,0,12,0"/>
 
-                <Button x:Name="BtnConnect" Content="接続" Width="65" Height="28" Background="#0284C7" Foreground="#FFFFFF" BorderBrush="#0284C7" Click="BtnConnect_Click"/>
-                <Ellipse x:Name="LedStatus" Width="10" Height="10" Fill="#94A3B8" Margin="14,0,0,0" VerticalAlignment="Center"/>
-                <TextBlock x:Name="TxtStatus" Text="未接続" VerticalAlignment="Center" Margin="6,0,0,0" Foreground="#64748B" FontWeight="Bold" FontSize="13"/>
-            </StackPanel>
+                    <Button x:Name="BtnConnect" Content="接続" Width="65" Height="28" Background="#0284C7" Foreground="#FFFFFF" BorderBrush="#0284C7" Click="BtnConnect_Click"/>
+                    <Ellipse x:Name="LedStatus" Width="10" Height="10" Fill="#94A3B8" Margin="14,0,0,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtStatus" Text="未接続" VerticalAlignment="Center" Margin="6,0,0,0" Foreground="#64748B" FontWeight="Bold" FontSize="13"/>
+                </StackPanel>
+
+                <Button x:Name="BtnSwitchToContest" DockPanel.Dock="Right" Content="簡易画面 (Bar) 🗖" Width="125" Height="28"
+                        Background="#F8FAFC" Foreground="#0284C7" BorderBrush="#0284C7" FontWeight="Bold"
+                        ToolTip="コンテスト用の横長タスクバー画面に切り替えます" Click="BtnSwitchToContest_Click"/>
+            </DockPanel>
         </Border>
 
         <!-- 2. ディスプレイ表示 & 視認性を大幅向上させた大型4連メーター -->
