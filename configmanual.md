@@ -164,7 +164,7 @@ DATA-USB = C
 28MHz = 09
 50MHz = 10
 
-# パターンB: 周波数ダイレクト指定（Kenwood等でBAND_SET未定義時）
+# パターンB: 周波数ダイレクト指定（YAESU Binary 等でバンド変更の専用コマンドがない場合）
 [BANDS]
 7MHz = 7074000
 14MHz = 14074000
@@ -203,6 +203,18 @@ DATA-USB = C
 2.4kHz = 2400
 3.0kHz = 3000
 
+```
+
+### `[METER]`（メーター類の最大値の指定）
+
+S メーター，POWER メーター，SWR メーター，ALC メーターの最大値を指定します。最大値とは，リグからの応答電文に含まれる値の最大値のことです。YAESU, ICOM は 255，KENWOOD は 30 であることが多いです。
+
+```ini
+[METERS]
+SMeterMax = 255
+PowerMeterMax = 255
+SwrMeterMax = 255
+AlcMeterMax = 255
 ```
 
 ---
@@ -310,6 +322,12 @@ DATA-LSB = 1
 2.4kHz = 2400
 2.7kHz = 2700
 3.0kHz = 3000
+
+[METERS]
+SMeterMax = 30
+PowerMeterMax = 30
+SwrMeterMax = 30
+AlcMeterMax = 30
 
 ```
 
@@ -419,6 +437,12 @@ RTTY-USB = C
 2.4kHz = 09
 3.0kHz = 12
 
+[METERS]
+SMeterMax = 255
+PowerMeterMax = 255
+SwrMeterMax = 255
+AlcMeterMax = 255
+
 ```
 
 ---
@@ -524,6 +548,12 @@ DATA-USB = 01
 2.8kHz = 2800
 3.0kHz = 3000
 
+[METERS]
+SMeterMax = 255
+PowerMeterMax = 255
+SwrMeterMax = 255
+AlcMeterMax = 255
+
 ```
 
 ---
@@ -573,6 +603,10 @@ BW_SET_A =
 BW_SET_B = 
 BW_SET = 
 
+# FA_GET, FB_GET, FA_SET, FB_SET はコードにべた書きしているので，設定できません
+# モードの取得，アンテナ制御はできません
+# バンドの切り替えは，OA コマンドで周波数を指定して切り替えます
+
 [MODES]
 LSB = 00
 USB = 01
@@ -609,5 +643,11 @@ RTTY = 08
 2.4kHz = 2400
 2.8kHz = 2800
 3.0kHz = 3000
+
+[METERS]
+SMeterMax = 255
+PowerMeterMax = 255
+SwrMeterMax = 255
+AlcMeterMax = 255
 
 ```
