@@ -38,6 +38,7 @@ namespace RigControlApp
         private bool _isUpdatingBand = false;
         private bool _isUpdatingAntenna = false;
         private bool _isUpdatingFilter = false;
+        private bool _isUpdatingConfig = false;
         private string _lastReadMode = "";
         private string _lastReadAntenna = "";
         private string _lastReadBandwidth = "";
@@ -63,6 +64,15 @@ namespace RigControlApp
         {
             CmbPort.ItemsSource = SerialPort.GetPortNames();
             if (CmbPort.Items.Count > 0) CmbPort.SelectedIndex = 0;
+
+            // ボーレート選択肢の初期化
+            int[] standardBaudRates = { 4800, 9600, 19200, 38400, 57600, 115200 };
+            CmbBaudRate.Items.Clear();
+            foreach (var rate in standardBaudRates)
+            {
+                CmbBaudRate.Items.Add(rate.ToString());
+            }
+            CmbBaudRate.Text = _config.BaudRate.ToString();
 
             // 実行ベースディレクトリおよびカレントディレクトリから .ini ファイルを網羅的に列挙
             CmbConfig.Items.Clear();
@@ -91,7 +101,13 @@ namespace RigControlApp
                 }
             }
 
-            if (CmbConfig.Items.Count > 0) CmbConfig.SelectedIndex = 0;
+            if (CmbConfig.Items.Count > 0)
+            {
+                _isUpdatingConfig = true;
+                CmbConfig.SelectedIndex = 0;
+                _isUpdatingConfig = false;
+                ApplySelectedConfigToUi();
+            }
 
             _pollTimer.Interval = TimeSpan.FromMilliseconds(_config.PollIntervalMs);
             _pollTimer.Tick += PollTimer_Tick;
@@ -104,6 +120,40 @@ namespace RigControlApp
         {
             TxtFreqMain.CaretIndex = 6;
             Dispatcher.BeginInvoke(new Action(UpdateMarkerPosition), DispatcherPriority.Loaded);
+        }
+
+        /// <summary>
+        /// 選択された設定ファイルから設定を読み込み、UIの初期表示（ボーレート等）へ反映
+        /// </summary>
+        private void ApplySelectedConfigToUi()
+        {
+            string? configPath = null;
+            if (CmbConfig.SelectedItem is ComboBoxItem item && item.Tag != null)
+            {
+                configPath = item.Tag.ToString();
+            }
+            else if (CmbConfig.SelectedItem != null)
+            {
+                configPath = CmbConfig.SelectedItem.ToString();
+            }
+
+            if (string.IsNullOrEmpty(configPath)) return;
+
+            try
+            {
+                var previewConfig = RigConfig.LoadFromFile(configPath);
+                _config = previewConfig;
+                CmbBaudRate.Text = _config.BaudRate.ToString();
+                _pollTimer.Interval = TimeSpan.FromMilliseconds(_config.PollIntervalMs);
+                PopulateFilterList();
+            }
+            catch { }
+        }
+
+        private void CmbConfig_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_isUpdatingConfig || (_driver != null && _driver.IsOpen)) return;
+            ApplySelectedConfigToUi();
         }
 
         private void PopulateFilterList()
@@ -143,6 +193,11 @@ namespace RigControlApp
                 BtnConnect.Background = new SolidColorBrush(Color.FromRgb(2, 132, 199));
                 LedStatus.Fill = new SolidColorBrush(Color.FromRgb(148, 163, 184));
                 TxtStatus.Text = "未接続";
+
+                CmbConfig.IsEnabled = true;
+                CmbPort.IsEnabled = true;
+                CmbBaudRate.IsEnabled = true;
+
                 AppendLog("リグから切断しました。");
                 return;
             }
@@ -167,6 +222,12 @@ namespace RigControlApp
                     _config.PortName = CmbPort.SelectedItem.ToString()!;
                 }
 
+                // UI上の指定ボーレートを適用（直接入力または選択値）
+                if (int.TryParse(CmbBaudRate.Text.Trim(), out int specifiedBaudRate))
+                {
+                    _config.BaudRate = specifiedBaudRate;
+                }
+
                 // 設定ファイルから取得したポーリング間隔をタイマーに適用
                 _pollTimer.Interval = TimeSpan.FromMilliseconds(_config.PollIntervalMs);
 
@@ -178,12 +239,16 @@ namespace RigControlApp
                 BtnConnect.Content = "切断";
                 BtnConnect.Background = new SolidColorBrush(Color.FromRgb(180, 40, 40));
                 LedStatus.Fill = new SolidColorBrush(Color.FromRgb(34, 197, 94));
-                TxtStatus.Text = $"{_config.PortName} 接続中";
+                TxtStatus.Text = $"{_config.PortName} ({_config.BaudRate}bps) 接続中";
+
+                CmbConfig.IsEnabled = false;
+                CmbPort.IsEnabled = false;
+                CmbBaudRate.IsEnabled = false;
 
                 await FetchCurrentInfoAsync();
                 _pollTimer.Start();
 
-                AppendLog($"接続成功: {_config.PortName} ({_config.Protocol}), 周期: {_config.PollIntervalMs}ms");
+                AppendLog($"接続成功: {_config.PortName} ({_config.Protocol}), {_config.BaudRate}bps, 周期: {_config.PollIntervalMs}ms");
             }
             catch (Exception ex)
             {
