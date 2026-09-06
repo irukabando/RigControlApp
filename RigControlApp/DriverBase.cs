@@ -5,7 +5,7 @@ using System.Text;
 namespace RigControlApp
 {
     /// <summary>
-    /// VFO の種別 (VFO-A / VFO-B)
+    /// VFO 種別 (VFO-A / VFO-B)
     /// </summary>
     public enum VfoType
     {
@@ -14,7 +14,7 @@ namespace RigControlApp
     }
 
     /// <summary>
-    /// リグ制御ドライバーの共通インターフェース
+    /// リグ制御ドライバ共通インターフェース
     /// </summary>
     public interface IRigDriver : IDisposable
     {
@@ -29,26 +29,26 @@ namespace RigControlApp
         void SetMode(VfoType vfo, string modeName);
         void SelectVfo(VfoType vfo);
         void SelectBand(VfoType vfo, string bandKey);
-        string GetAntenna(VfoType vfo); // 追加
+        string GetAntenna(VfoType vfo);
         void SetAntenna(VfoType vfo, string antennaIndex);
         void SetPtt(bool txOn);
-        bool GetPtt();                   // 追加: PTT状態取得
-        bool GetTuner();                 // 追加: アンテナチューナー状態取得
-        void SetTuner(bool tunerOn);     // 追加: アンテナチューナーON/OFF設定
-        string GetBandwidth(VfoType vfo); // 追加: フィルタ帯域取得
-        void SetBandwidth(VfoType vfo, string bandwidthKey); // 追加: フィルタ帯域設定
+        bool GetPtt();
+        bool GetTuner();
+        void SetTuner(bool tunerOn);
+        string GetBandwidth(VfoType vfo);
+        void SetBandwidth(VfoType vfo, string bandwidthKey);
         string GetRigState();
         int GetSMeter();
-        int GetPowerMeter();             // 追加: Powerメーター値取得
-        int GetSwrMeter();               // 追加: SWRメーター値取得
-        int GetAlcMeter();               // 追加: ALCメーター値取得
+        int GetPowerMeter();
+        int GetSwrMeter();
+        int GetAlcMeter();
         int GetAfGain();
         void SetAfGain(int gainValue);
         string SendRawCommand(string rawInput);
     }
 
     /// <summary>
-    /// リグドライバーの共通基底クラス
+    /// リグ制御ドライバ基底クラス
     /// </summary>
     public abstract class RigDriverBase : IRigDriver
     {
@@ -57,7 +57,6 @@ namespace RigControlApp
         protected readonly object SyncLock = new();
 
         public virtual bool SupportsDualVfoRead => false;
-
         public abstract string GetAntenna(VfoType vfo);
 
         protected RigDriverBase(RigConfig config)
@@ -133,8 +132,19 @@ namespace RigControlApp
         {
             if (!IsOpen)
             {
-                throw new InvalidOperationException("シリアルポートが開いていません。先に接続を行ってください。");
+                throw new InvalidOperationException("シリアルポートが開いていません。");
             }
+        }
+
+        /// <summary>
+        /// 生メータ値を 0-255 の範囲に正規化
+        /// </summary>
+        protected static int NormalizeMeterValue(int rawVal, int maxVal)
+        {
+            if (maxVal <= 0 || rawVal <= 0) return 0;
+            if (maxVal == 255) return Math.Clamp(rawVal, 0, 255);
+            int normalized = (int)Math.Round((double)rawVal * 255.0 / maxVal);
+            return Math.Clamp(normalized, 0, 255);
         }
 
         public abstract long GetFrequency(VfoType vfo);
@@ -161,7 +171,7 @@ namespace RigControlApp
     }
 
     /// <summary>
-    /// リグ設定に応じたドライバーを生成するファクトリクラス
+    /// ドライバ生成ファクトリ
     /// </summary>
     public static class RigDriverFactory
     {
@@ -169,10 +179,12 @@ namespace RigControlApp
         {
             return config.Protocol switch
             {
+                ProtocolType.Kenwood => new KenwoodCatDriver(config),
+                ProtocolType.Yaesu => new YaesuCatDriver(config),
+                ProtocolType.Ascii => new YaesuCatDriver(config), // 汎用 ASCII は Yaesu 互換
                 ProtocolType.Civ => new IcomCivDriver(config),
                 ProtocolType.YaesuBinary => new YaesuBinaryDriver(config),
-                ProtocolType.Ascii => new AsciiCatDriver(config),
-                _ => throw new NotSupportedException($"サポートされていないプロトコルです: {config.Protocol}")
+                _ => throw new NotSupportedException($"未対応のプロトコルです: {config.Protocol}")
             };
         }
     }

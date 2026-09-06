@@ -6,17 +6,19 @@ using System.IO.Ports;
 namespace RigControlApp
 {
     /// <summary>
-    /// 通信プロトコルの種別
+    /// 通信プロトコル種別
     /// </summary>
     public enum ProtocolType
     {
-        Ascii,          // Kenwood / Yaesu 等の ASCII CAT (例: FA; MD02;)
-        Civ,            // Icom CI-V バイナリ形式 (0xFE 0xFE ...)
-        YaesuBinary     // Yaesu 5バイトバイナリ CAT (FT-1000, FT-1000MP 等)
+        Kenwood,        // Kenwood ASCII CAT (TS-590, TS-890, TS-990 など)
+        Yaesu,          // Yaesu 新型 ASCII CAT (FTDX101, FT-991A, FTDX10, FT-710 など)
+        Ascii,          // 汎用 ASCII CAT
+        Civ,            // Icom CI-V バイナリ (0xFE 0xFE ...)
+        YaesuBinary     // Yaesu 5バイト Binary CAT (FT-1000, FT-1000MP など)
     }
 
     /// <summary>
-    /// 無線機接続およびコマンド設定を保持する設定クラス
+    /// リグ設定保持クラス
     /// </summary>
     public class RigConfig
     {
@@ -31,27 +33,28 @@ namespace RigControlApp
         public int ReadTimeoutMs { get; set; } = 1000;
         public int WriteTimeoutMs { get; set; } = 1000;
 
-        // --- プロトコル・ポーリング設定 ---
-        public ProtocolType Protocol { get; set; } = ProtocolType.Ascii;
+        // --- プロトコル共通設定 ---
+        public ProtocolType Protocol { get; set; } = ProtocolType.Kenwood;
         public char Terminator { get; set; } = ';';
         public int FreqDigits { get; set; } = 11;
         public byte CivRigAddress { get; set; } = 0x94;
         public byte CivControllerAddress { get; set; } = 0xE0;
         public int PollIntervalMs { get; set; } = 500;
 
-        // --- コマンドおよびマッピング設定 (.ini から動的読み込み) ---
+        // --- マップ設定 (.ini から動的読み込み) ---
+        public Dictionary<string, string> Meters { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> Commands { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> ModeMap { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> Bands { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> Antennas { get; } = new(StringComparer.OrdinalIgnoreCase);
-        public Dictionary<string, string> Filters { get; } = new(StringComparer.OrdinalIgnoreCase); // 追加: フィルタ帯域の段階設定
+        public Dictionary<string, string> Filters { get; } = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
-        /// .ini ファイルから設定を読み込む
+        /// .ini ファイルから設定をロード
         /// </summary>
         public static RigConfig LoadFromFile(string filePath)
         {
-            // 指定されたパスに直接存在しない場合のパス・拡張子自動探索ロジック
+            // 設定ファイルの検索
             if (!File.Exists(filePath))
             {
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -96,25 +99,25 @@ namespace RigControlApp
             {
                 string line = rawLine.Trim();
 
-                // コメントおよび空行をスキップ (#, ;)
+                // コメント・空行スキップ (#, ;)
                 if (string.IsNullOrEmpty(line) || line.StartsWith("#") || line.StartsWith(";"))
                     continue;
 
-                // セクションヘッダの判定
+                // セクションヘッダ
                 if (line.StartsWith("[") && line.EndsWith("]"))
                 {
                     currentSection = line[1..^1].Trim().ToUpperInvariant();
                     continue;
                 }
 
-                // キーと値の分割
+                // キー = 値 のパース
                 int eqIdx = line.IndexOf('=');
                 if (eqIdx <= 0) continue;
 
                 string key = line[..eqIdx].Trim();
                 string val = line[(eqIdx + 1)..].Trim();
 
-                // 行末のインラインコメント (#) を安全に除去 (末尾の ; はCAT終端文字として保持)
+                // 行末コメント除去 (#)
                 int commentIdx = val.IndexOf('#');
                 if (commentIdx >= 0)
                 {
@@ -128,6 +131,10 @@ namespace RigControlApp
                         break;
                     case "PROTOCOL":
                         ParseProtocolConfig(config, key, val);
+                        break;
+                    case "METERS":
+                    case "METER":
+                        config.Meters[key] = val;
                         break;
                     case "COMMANDS":
                         config.Commands[key] = val;
@@ -153,7 +160,7 @@ namespace RigControlApp
         }
 
         /// <summary>
-        /// [SERIAL] セクションの値をパース
+        /// [SERIAL] セクションのパース
         /// </summary>
         private static void ParseSerialConfig(RigConfig config, string key, string val)
         {
@@ -169,23 +176,31 @@ namespace RigControlApp
         }
 
         /// <summary>
-        /// [PROTOCOL] セクションの値をパース
+        /// [PROTOCOL] セクションのパース
         /// </summary>
         private static void ParseProtocolConfig(RigConfig config, string key, string val)
         {
             if (key.Equals("Type", StringComparison.OrdinalIgnoreCase))
             {
-                if (Enum.TryParse<ProtocolType>(val, true, out var proto))
+                if (val.Equals("Kenwood", StringComparison.OrdinalIgnoreCase))
                 {
-                    config.Protocol = proto;
+                    config.Protocol = ProtocolType.Kenwood;
                 }
-                else if (val.Equals("CIV", StringComparison.OrdinalIgnoreCase))
+                else if (val.Equals("Yaesu", StringComparison.OrdinalIgnoreCase))
+                {
+                    config.Protocol = ProtocolType.Yaesu;
+                }
+                else if (val.Equals("CIV", StringComparison.OrdinalIgnoreCase) || val.Equals("Icom", StringComparison.OrdinalIgnoreCase))
                 {
                     config.Protocol = ProtocolType.Civ;
                 }
-                else if (val.Contains("Yaesu", StringComparison.OrdinalIgnoreCase) || val.Contains("Binary", StringComparison.OrdinalIgnoreCase))
+                else if (val.Contains("YaesuBinary", StringComparison.OrdinalIgnoreCase) || val.Contains("Binary", StringComparison.OrdinalIgnoreCase))
                 {
                     config.Protocol = ProtocolType.YaesuBinary;
+                }
+                else if (Enum.TryParse<ProtocolType>(val, true, out var proto))
+                {
+                    config.Protocol = proto;
                 }
                 else
                 {

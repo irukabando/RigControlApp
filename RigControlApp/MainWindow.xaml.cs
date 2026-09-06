@@ -42,6 +42,16 @@ namespace RigControlApp
         private string _lastReadAntenna = "";
         private string _lastReadBandwidth = "";
 
+        // コンテスト用横長タスクバー画面のインスタンス参照
+        private ContestBarWindow? _contestBar;
+
+        // 簡易画面から参照可能なプロパティ群
+        public long CurrentFreq => _currentFreq;
+        public string CurrentMode => _activeVfo == VfoType.VfoA ? _vfoAMode : _vfoBMode;
+        public string CurrentAntenna => _activeVfo == VfoType.VfoA ? _vfoAAntenna : _vfoBAntenna;
+        public bool IsTxActive => _isTxActive;
+        public VfoType ActiveVfo => _activeVfo;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -132,7 +142,7 @@ namespace RigControlApp
                 BtnConnect.Content = "接続";
                 BtnConnect.Background = new SolidColorBrush(Color.FromRgb(2, 132, 199));
                 LedStatus.Fill = new SolidColorBrush(Color.FromRgb(148, 163, 184));
-                TxtStatus.Text = "切断";
+                TxtStatus.Text = "未接続";
                 AppendLog("リグから切断しました。");
                 return;
             }
@@ -306,6 +316,14 @@ namespace RigControlApp
                 {
                     _isTunerActive = isTuner;
                     UpdateTunerUi(_isTunerActive);
+                }
+
+                // コンテスト用簡易バー画面が表示中であればリアルタイム通知
+                if (_contestBar != null && _contestBar.IsVisible)
+                {
+                    _contestBar.UpdateStatus(_currentFreq, _activeVfo == VfoType.VfoA ? _vfoAMode : _vfoBMode,
+                        _activeVfo == VfoType.VfoA ? _vfoAAntenna : _vfoBAntenna,
+                        smeter, power, swr, alc, _isTxActive, _activeVfo);
                 }
             }
             catch
@@ -955,6 +973,112 @@ namespace RigControlApp
             }
         }
 
+        // =========================================================================
+        // コンテスト用簡易バー画面 (ContestBarWindow) 連携・切替ロジック
+        // =========================================================================
+
+        private void BtnSwitchToContest_Click(object sender, RoutedEventArgs e)
+        {
+            if (_contestBar == null)
+            {
+                _contestBar = new ContestBarWindow(this);
+                _contestBar.Closed += (s, args) => _contestBar = null;
+            }
+
+            _contestBar.SyncStateFromMain();
+            _contestBar.Show();
+            this.Hide();
+        }
+
+        public void ReturnFromContest()
+        {
+            if (_contestBar != null)
+            {
+                _contestBar.Hide();
+            }
+            this.Show();
+            this.Activate();
+        }
+
+        public async Task ApplyFrequencyFromContestAsync(long freq)
+        {
+            _currentFreq = freq;
+            UpdateFrequencyDisplay(_currentFreq);
+            UpdateBandSelection(_currentFreq);
+            await ApplyFrequencyAsync(_currentFreq);
+        }
+
+        public async Task TogglePttFromContestAsync()
+        {
+            if (_driver == null || !_driver.IsOpen) return;
+
+            bool targetTx = !_isTxActive;
+            try
+            {
+                await Task.Run(() => _driver.SetPtt(targetTx));
+                _isTxActive = targetTx;
+                UpdatePttUi(_isTxActive);
+                AppendLog(targetTx ? "[Bar] PTT ON (送信開始)" : "[Bar] PTT OFF (受信開始)");
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[Bar PTT制御エラー]: {ex.Message}");
+            }
+        }
+
+        public async Task SwitchVfoFromContestAsync(VfoType vfo)
+        {
+            if (_activeVfo == vfo) return;
+
+            _activeVfo = vfo;
+            UpdateVfoUi();
+
+            if (_driver != null && _driver.IsOpen)
+            {
+                _isBusy = true;
+                try
+                {
+                    await Task.Run(() => _driver.SelectVfo(vfo));
+                    await Task.Delay(60);
+                    AppendLog($"[Bar] {vfo} を選択");
+                    await FetchCurrentInfoAsync();
+                }
+                catch (Exception ex)
+                {
+                    AppendLog($"[Bar VFO切替エラー]: {ex.Message}");
+                }
+                finally
+                {
+                    _isBusy = false;
+                }
+            }
+        }
+
+        public async Task SetAntennaFromContestAsync(string antIndex)
+        {
+            if (_driver == null || !_driver.IsOpen) return;
+
+            try
+            {
+                _isBusy = true;
+                await Task.Run(() => _driver.SetAntenna(_activeVfo, antIndex));
+                _lastReadAntenna = antIndex;
+                if (_activeVfo == VfoType.VfoA) _vfoAAntenna = antIndex;
+                else _vfoBAntenna = antIndex;
+
+                UpdateAntennaUi(antIndex);
+                AppendLog($"[Bar] アンテナ切替: ANT {antIndex} ({_activeVfo})");
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[Bar アンテナ切替エラー]: {ex.Message}");
+            }
+            finally
+            {
+                _isBusy = false;
+            }
+        }
+
         private void AppendLog(string message)
         {
             TxtLog.AppendText($"[{DateTime.Now:HH:mm:ss}] {message}\n");
@@ -965,6 +1089,7 @@ namespace RigControlApp
         {
             _pollTimer.Stop();
             _driver?.Dispose();
+            _contestBar?.Close();
             base.OnClosed(e);
         }
     }

@@ -4,7 +4,7 @@ using System.Threading;
 namespace RigControlApp
 {
     /// <summary>
-    /// Yaesu 5-Byte Binary CAT プロトコル向けドライバー (FT-1000, FT-1000MP, Mark-V 等)
+    /// Yaesu 5-Byte Binary CAT ドライバ (FT-1000, FT-1000MP, Mark-V など)
     /// </summary>
     public class YaesuBinaryDriver : RigDriverBase
     {
@@ -17,7 +17,7 @@ namespace RigControlApp
         public YaesuBinaryDriver(RigConfig config) : base(config) { }
 
         /// <summary>
-        /// 5バイトコマンドを送信
+        /// 5バイトパケット送信
         /// </summary>
         public void SendCommand(byte p4, byte p3, byte p2, byte p1, byte cmd)
         {
@@ -39,13 +39,14 @@ namespace RigControlApp
                 try
                 {
                     Port!.DiscardInBuffer();
-                    // ステータス要求: 00 00 00 03 10
+                    // オペレーティングデータ要求: 00 00 00 03 10
                     byte[] request = { 0x00, 0x00, 0x00, 0x03, 0x10 };
                     Port.Write(request, 0, request.Length);
 
                     byte[] buf = new byte[32];
                     int read = 0;
                     int elapsed = 0;
+
                     while (read < 32 && elapsed < 200)
                     {
                         if (Port.BytesToRead > 0)
@@ -81,7 +82,7 @@ namespace RigControlApp
                     (long)Math.Round((((long)buf[offset] << 24) | ((long)buf[offset + 1] << 16) | ((long)buf[offset + 2] << 8) | buf[offset + 3]) / 1.60),
                 "MarkVField" =>
                     (((long)buf[offset] << 24) | ((long)buf[offset + 1] << 16) | ((long)buf[offset + 2] << 8) | buf[offset + 3]) * 10L,
-                _ => DecodeMarkVBcd(buf, offset) // MarkV など
+                _ => DecodeMarkVBcd(buf, offset) // MarkV デフォルト
             };
         }
 
@@ -177,7 +178,6 @@ namespace RigControlApp
             string antCode = Config.Antennas.GetValueOrDefault(antennaIndex, antennaIndex);
             string key = vfo == VfoType.VfoA ? "ANT_SET_A" : "ANT_SET_B";
             string tmpl = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("ANT_SET", ""));
-
             if (!string.IsNullOrEmpty(tmpl))
             {
                 SendRawCommand(string.Format(tmpl, antCode));
@@ -191,15 +191,10 @@ namespace RigControlApp
         }
 
         public override bool GetPtt() => false;
-
         public override bool GetTuner() => false;
-
         public override void SetTuner(bool tunerOn) { }
-
         public override string GetBandwidth(VfoType vfo) => string.Empty;
-
         public override void SetBandwidth(VfoType vfo, string bandwidthKey) { }
-
         public override string GetRigState() => $"Freq: {_cachedFreqA} Hz, Mode: {_cachedMode}";
 
         public override int GetSMeter()
@@ -207,7 +202,6 @@ namespace RigControlApp
             lock (SyncLock)
             {
                 if (!IsOpen) return 0;
-
                 try
                 {
                     Port!.DiscardInBuffer();
@@ -217,6 +211,7 @@ namespace RigControlApp
                     byte[] buf = new byte[5];
                     int read = 0;
                     int elapsed = 0;
+
                     while (read < 5 && elapsed < 100)
                     {
                         if (Port.BytesToRead > 0)
@@ -228,7 +223,11 @@ namespace RigControlApp
                         }
                     }
 
-                    if (read >= 1) return buf[0];
+                    if (read >= 1)
+                    {
+                        int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("SMeter", "255"), out int max) ? max : 255;
+                        return NormalizeMeterValue(buf[0], maxVal);
+                    }
                 }
                 catch { }
 
@@ -237,13 +236,9 @@ namespace RigControlApp
         }
 
         public override int GetPowerMeter() => 0;
-
         public override int GetSwrMeter() => 0;
-
         public override int GetAlcMeter() => 0;
-
         public override int GetAfGain() => 0;
-
         public override void SetAfGain(int gainValue) { }
 
         public override string SendRawCommand(string raw)
