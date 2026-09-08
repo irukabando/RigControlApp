@@ -90,6 +90,7 @@
 
             <Rectangle Grid.Column="7" Width="1" Fill="#E2E8F0" Height="36" VerticalAlignment="Center"/>
 
+            <!-- 5. 4連コンパクトメーター (S, PO, SWR, ALC) -->
             <Grid Grid.Column="8" VerticalAlignment="Center" Margin="2,0">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
@@ -102,7 +103,8 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
 
-                <Grid Grid.Row="0" Grid.Column="0">
+                <!-- 上段左: Sメーター -->
+                <Grid Grid.Row="0" Grid.Column="0" Cursor="Hand" ToolTip="クリックでメーター切替 (SM_SET / PO_SET)" PreviewMouseDown="Meter_PreviewMouseDown" Tag="SM">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="26"/>
                         <ColumnDefinition Width="*"/>
@@ -112,7 +114,8 @@
                                  Foreground="#0284C7" Background="#E2E8F0" BorderThickness="0"/>
                 </Grid>
 
-                <Grid Grid.Row="0" Grid.Column="2">
+                <!-- 上段右: POメーター -->
+                <Grid Grid.Row="0" Grid.Column="2" Cursor="Hand" ToolTip="クリックでメーター切替 (PO_SET)" PreviewMouseDown="Meter_PreviewMouseDown" Tag="PO">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="26"/>
                         <ColumnDefinition Width="*"/>
@@ -122,7 +125,8 @@
                                  Foreground="#10B981" Background="#E2E8F0" BorderThickness="0"/>
                 </Grid>
 
-                <Grid Grid.Row="2" Grid.Column="0">
+                <!-- 下段左: SWRメーター -->
+                <Grid Grid.Row="2" Grid.Column="0" Cursor="Hand" ToolTip="クリックでメーター切替 (SWR_SET)" PreviewMouseDown="Meter_PreviewMouseDown" Tag="SWR">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="26"/>
                         <ColumnDefinition Width="*"/>
@@ -132,7 +136,8 @@
                                  Foreground="#F59E0B" Background="#E2E8F0" BorderThickness="0"/>
                 </Grid>
 
-                <Grid Grid.Row="2" Grid.Column="2">
+                <!-- 下段右: ALCメーター -->
+                <Grid Grid.Row="2" Grid.Column="2" Cursor="Hand" ToolTip="クリックでメーター切替 (ALC_SET)" PreviewMouseDown="Meter_PreviewMouseDown" Tag="ALC">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="26"/>
                         <ColumnDefinition Width="*"/>

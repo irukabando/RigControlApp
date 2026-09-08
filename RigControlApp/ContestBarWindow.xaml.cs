@@ -329,5 +329,13 @@ namespace RigControlApp
             }
             UpdateMarkerPosition();
         }
+
+        private async void Meter_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is FrameworkElement elem && elem.Tag is string meterType)
+            {
+                await _mainWindow.SelectMeterAsync(meterType);
+            }
+        }
     }
 }

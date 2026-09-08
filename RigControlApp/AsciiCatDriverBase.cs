@@ -137,5 +137,24 @@ namespace RigControlApp
 
             return ExecuteCommand(rawInput);
         }
+
+        /// <summary>
+        /// メータークリック時の表示切替コマンドを実行 (SM_SET / PO_SET / SWR_SET / ALC_SET)
+        /// </summary>
+        public override void SelectMeter(string meterType)
+        {
+            string key = $"{meterType.ToUpperInvariant()}_SET";
+
+            // Sメータークリック時、SM_SET が無ければ PO_SET をフォールバック
+            if (!Config.Commands.ContainsKey(key) && key == "SM_SET")
+            {
+                key = "PO_SET";
+            }
+
+            if (Config.Commands.TryGetValue(key, out var cmd) && !string.IsNullOrWhiteSpace(cmd))
+            {
+                ExecuteCommand(cmd, expectResponse: false);
+            }
+        }
     }
 }

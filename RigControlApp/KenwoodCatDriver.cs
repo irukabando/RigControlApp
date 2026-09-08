@@ -249,7 +249,7 @@ namespace RigControlApp
             // Kenwood RM1; -> RM1[0000~0030]; (1=SWR)
             string cmd = Config.Commands.GetValueOrDefault("SWR_GET", "RM1;");
             string resp = ExecuteCommand(cmd);
-            int rawVal = ParseKenwoodMeter(resp, cmd);
+            int rawVal = ParseKenwoodMeter(resp, Config.Commands.GetValueOrDefault("SWR_SET", "RM1;"));
             int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("SwrMeter", "30"), out int max) ? max : 30;
             return NormalizeMeterValue(rawVal, maxVal);
         }
@@ -259,7 +259,7 @@ namespace RigControlApp
             // Kenwood RM3; -> RM3[0000~0030]; (3=ALC)
             string cmd = Config.Commands.GetValueOrDefault("ALC_GET", "RM3;");
             string resp = ExecuteCommand(cmd);
-            int rawVal = ParseKenwoodMeter(resp, cmd);
+            int rawVal = ParseKenwoodMeter(resp, Config.Commands.GetValueOrDefault("ALC_SET", "RM3;"));
             int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("AlcMeter", "30"), out int max) ? max : 30;
             return NormalizeMeterValue(rawVal, maxVal);
         }

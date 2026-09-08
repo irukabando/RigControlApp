@@ -45,6 +45,7 @@ namespace RigControlApp
         int GetAfGain();
         void SetAfGain(int gainValue);
         string SendRawCommand(string rawInput);
+        void SelectMeter(string meterType);
     }
 
     /// <summary>
@@ -168,6 +169,7 @@ namespace RigControlApp
         public abstract int GetAfGain();
         public abstract void SetAfGain(int gainValue);
         public abstract string SendRawCommand(string rawInput);
+        public virtual void SelectMeter(string meterType) { }
     }
 
     /// <summary>

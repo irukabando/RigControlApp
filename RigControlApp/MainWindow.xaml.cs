@@ -1157,5 +1157,28 @@ namespace RigControlApp
             _contestBar?.Close();
             base.OnClosed(e);
         }
+
+        private async void Meter_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            if (sender is FrameworkElement elem && elem.Tag is string meterType)
+            {
+                await SelectMeterAsync(meterType);
+            }
+        }
+
+        public async Task SelectMeterAsync(string meterType)
+        {
+            if (_driver == null || !_driver.IsOpen) return;
+
+            try
+            {
+                await Task.Run(() => _driver.SelectMeter(meterType));
+                AppendLog($"メーター切替コマンド送信: {meterType}_SET");
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[メーター切替エラー]: {ex.Message}");
+            }
+        }
     }
 }
