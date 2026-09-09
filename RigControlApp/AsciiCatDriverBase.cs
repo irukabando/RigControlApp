@@ -74,25 +74,22 @@ namespace RigControlApp
         {
             if (string.IsNullOrEmpty(resp)) return string.Empty;
 
-            // 終端記号を除去
-            resp = resp.TrimEnd(Config.Terminator);
-            string prefix = sentCmd.TrimEnd(Config.Terminator);
+            resp = resp.TrimEnd(Config.Terminator).Trim();
+            string prefix = sentCmd.TrimEnd(Config.Terminator).Trim();
 
-            // 送信したプレフィックスと完全に一致する場合はその長さ分をスライス
             if (resp.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             {
-                return resp[prefix.Length..];
+                return resp[prefix.Length..].Trim();
             }
 
-            // プレフィックスの長さが異なる場合（例: sent='MD;' で resp='MD02;' など）は先頭の英字部分をスキップ
             int idx = 0;
             while (idx < resp.Length && !char.IsDigit(resp[idx])) idx++;
             if (idx < resp.Length)
             {
-                return resp[idx..];
+                return resp[idx..].Trim();
             }
 
-            return resp;
+            return resp.Trim();
         }
 
         public override long GetFrequency(VfoType vfo)

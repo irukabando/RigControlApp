@@ -226,8 +226,8 @@ namespace RigControlApp
 
         public override int GetSMeter()
         {
-            // Kenwood SM0; -> SM0[0000~0030];
-            string cmd = Config.Commands.GetValueOrDefault("SM_GET", "SM0;");
+            // TS-590 は SM;、TS-890/990 は SM0;
+            string cmd = Config.Commands.GetValueOrDefault("SM_GET", "SM;");
             string resp = ExecuteCommand(cmd);
             int rawVal = ParseKenwoodMeter(resp, cmd);
             int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("SMeter", "30"), out int max) ? max : 30;

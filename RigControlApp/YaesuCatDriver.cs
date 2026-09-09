@@ -236,7 +236,7 @@ namespace RigControlApp
         public override int GetPowerMeter()
         {
             // Yaesu RM5; (POW) -> RM5[3桁 P2][3桁 000];
-            string cmd = Config.Commands.GetValueOrDefault("PO_GET", "RM5;");
+            string cmd = Config.Commands.GetValueOrDefault("PO_GET", "RM08;");
             string resp = ExecuteCommand(cmd);
             int rawVal = ParseYaesuReadMeter(resp, cmd);
             int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("PowerMeter", "255"), out int max) ? max : 255;
@@ -246,7 +246,7 @@ namespace RigControlApp
         public override int GetSwrMeter()
         {
             // Yaesu RM6; (SWR) -> RM6[3桁 P2][3桁 000];
-            string cmd = Config.Commands.GetValueOrDefault("SWR_GET", "RM6;");
+            string cmd = Config.Commands.GetValueOrDefault("SWR_GET", "RM09;");
             string resp = ExecuteCommand(cmd);
             int rawVal = ParseYaesuReadMeter(resp, cmd);
             int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("SwrMeter", "255"), out int max) ? max : 255;
@@ -256,7 +256,7 @@ namespace RigControlApp
         public override int GetAlcMeter()
         {
             // Yaesu RM4; (ALC) -> RM4[3桁 P2][3桁 000];
-            string cmd = Config.Commands.GetValueOrDefault("ALC_GET", "RM4;");
+            string cmd = Config.Commands.GetValueOrDefault("ALC_GET", "RM07;");
             string resp = ExecuteCommand(cmd);
             int rawVal = ParseYaesuReadMeter(resp, cmd);
             int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("AlcMeter", "255"), out int max) ? max : 255;

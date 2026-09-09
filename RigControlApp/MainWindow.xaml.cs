@@ -239,7 +239,7 @@ namespace RigControlApp
                 BtnConnect.Content = "切断";
                 BtnConnect.Background = new SolidColorBrush(Color.FromRgb(180, 40, 40));
                 LedStatus.Fill = new SolidColorBrush(Color.FromRgb(34, 197, 94));
-                TxtStatus.Text = $"{_config.PortName} ({_config.BaudRate}bps) 接続中";
+                TxtStatus.Text = "接続中";
 
                 CmbConfig.IsEnabled = false;
                 CmbPort.IsEnabled = false;
@@ -248,7 +248,7 @@ namespace RigControlApp
                 await FetchCurrentInfoAsync();
                 _pollTimer.Start();
 
-                AppendLog($"接続成功: {_config.PortName} ({_config.Protocol}), {_config.BaudRate}bps, 周期: {_config.PollIntervalMs}ms");
+                AppendLog($"接続成功: {_config.PortName} ({_config.Protocol}), {_config.BaudRate} bps, 周期: {_config.PollIntervalMs} ms");
             }
             catch (Exception ex)
             {
@@ -293,19 +293,19 @@ namespace RigControlApp
                     antenna = _driver.GetAntenna(currentVfo);
                     bandwidth = _driver.GetBandwidth(currentVfo);
 
-                    isTx = _driver.GetPtt();
-                    isTuner = _driver.GetTuner();
+                    try { isTx = _driver.GetPtt(); } catch { }
+                    try { isTuner = _driver.GetTuner(); } catch { }
 
-                    // 通信負荷軽減とリアルタイム性の両立: RX時はSメーター、TX時はPO/SWR/ALCを取得
+                    // メーター値の取得
                     if (isTx)
                     {
-                        power = _driver.GetPowerMeter();
-                        swr = _driver.GetSwrMeter();
-                        alc = _driver.GetAlcMeter();
+                        try { power = _driver.GetPowerMeter(); } catch { }
+                        try { swr = _driver.GetSwrMeter(); } catch { }
+                        try { alc = _driver.GetAlcMeter(); } catch { }
                     }
                     else
                     {
-                        smeter = _driver.GetSMeter();
+                        try { smeter = _driver.GetSMeter(); } catch { }
                     }
                 });
 
@@ -364,11 +364,21 @@ namespace RigControlApp
                     UpdateFilterUi(bandwidth);
                 }
 
-                // 4連メーターの同時更新
+                // 4連メーターの反映
                 PbSMeter.Value = Math.Clamp(smeter, 0, 255);
-                PbPowerMeter.Value = Math.Clamp(power, 0, 255);
-                PbSwrMeter.Value = Math.Clamp(swr, 0, 255);
-                PbAlcMeter.Value = Math.Clamp(alc, 0, 255);
+                if (isTx)
+                {
+                    PbPowerMeter.Value = Math.Clamp(power, 0, 255);
+                    PbSwrMeter.Value = Math.Clamp(swr, 0, 255);
+                    PbAlcMeter.Value = Math.Clamp(alc, 0, 255);
+                }
+                else
+                {
+                    // 受信時は送信メーターを 0 にするか、必要に応じて前回値を保持
+                    PbPowerMeter.Value = 0;
+                    PbSwrMeter.Value = 0;
+                    PbAlcMeter.Value = 0;
+                }
 
                 // PTT & ATU スイッチ状態の反映
                 if (isTx != _isTxActive)
