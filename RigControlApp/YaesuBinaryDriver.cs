@@ -44,14 +44,14 @@ namespace RigControlApp
 
         /// <summary>
         /// 5バイトバイナリコマンドを送信します。
-        /// FT-1000MP マニュアル仕様: 送信順は DATA 1 (P4), DATA 2 (P3), DATA 3 (P2), DATA 4 (P1), DATA 5 (CMD)
+        /// 送信順: DATA 1 (d1), DATA 2 (d2), DATA 3 (d3), DATA 4 (d4), DATA 5 (cmd)
         /// </summary>
-        public void SendCommand(byte p4, byte p3, byte p2, byte p1, byte cmd)
+        public void SendCommand(byte d1, byte d2, byte d3, byte d4, byte cmd)
         {
             lock (SyncLock)
             {
                 EnsureOpen();
-                byte[] packet = { p4, p3, p2, p1, cmd };
+                byte[] packet = { d1, d2, d3, d4, cmd };
                 Port!.Write(packet, 0, packet.Length);
                 Thread.Sleep(30);
             }
@@ -188,12 +188,12 @@ namespace RigControlApp
             if (vfo == VfoType.VfoA)
             {
                 _cachedFreqA = freqHz;
-                SendCommand(p4, p3, p2, p1, 0x0A); // VFO-A 周波数設定 (0x0A)
+                SendCommand(p1, p2, p3, p4, 0x0A);
             }
             else
             {
                 _cachedFreqB = freqHz;
-                SendCommand(p4, p3, p2, p1, 0x8A); // VFO-B 周波数設定 (0x8A)
+                SendCommand(p1, p2, p3, p4, 0x8A);
             }
         }
 
