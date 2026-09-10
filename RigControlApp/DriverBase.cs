@@ -34,6 +34,7 @@ namespace RigControlApp
         void SetPtt(bool txOn);
         bool GetPtt();
         bool GetTuner();
+        void StartTuning();
         void SetTuner(bool tunerOn);
         string GetBandwidth(VfoType vfo);
         void SetBandwidth(VfoType vfo, string bandwidthKey);
@@ -158,6 +159,7 @@ namespace RigControlApp
         public abstract void SetPtt(bool txOn);
         public abstract bool GetPtt();
         public abstract bool GetTuner();
+        public virtual void StartTuning() { }
         public abstract void SetTuner(bool tunerOn);
         public abstract string GetBandwidth(VfoType vfo);
         public abstract void SetBandwidth(VfoType vfo, string bandwidthKey);

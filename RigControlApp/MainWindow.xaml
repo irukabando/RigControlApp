@@ -319,10 +319,20 @@
                             <ColumnDefinition Width="8"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
+
+                        <!-- PTT 切替ボタン -->
                         <Button x:Name="BtnPtt" Grid.Column="0" Content="RX [受信]" Height="28"
-                                Background="#E2E8F0" Foreground="#1E293B" BorderBrush="#CBD5E1" FontWeight="Bold" Click="BtnPtt_Click"/>
-                        <Button x:Name="BtnTuner" Grid.Column="2" Content="ATU: OFF" Height="28"
-                                Background="#E2E8F0" Foreground="#1E293B" BorderBrush="#CBD5E1" FontWeight="Bold" Click="BtnTuner_Click"/>
+            Background="#E2E8F0" Foreground="#1E293B" BorderBrush="#CBD5E1" FontWeight="Bold" Click="BtnPtt_Click"/>
+
+                        <!-- ATU ON/OFF と TUNE 開始ボタンを2分割配置 -->
+                        <UniformGrid Grid.Column="2" Columns="2">
+                            <Button x:Name="BtnTuner" Content="ATU: OFF" Height="28" Margin="0,0,2,0"
+                Background="#E2E8F0" Foreground="#1E293B" BorderBrush="#CBD5E1" FontWeight="Bold" Click="BtnTuner_Click"
+                ToolTip="アンテナチューナーの ON / OFF (スルー) を切り替えます"/>
+                            <Button x:Name="BtnTuneStart" Content="TUNE" Height="28" Margin="2,0,0,0"
+                Background="#F8FAFC" Foreground="#D97706" BorderBrush="#F59E0B" FontWeight="Bold" Click="BtnTuneStart_Click"
+                ToolTip="アンテナチューナーのチューニング動作を開始します (強制チューン)"/>
+                        </UniformGrid>
                     </Grid>
                 </Grid>
             </Border>

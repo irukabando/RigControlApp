@@ -622,21 +622,52 @@ namespace RigControlApp
             }
         }
 
+        // --- アンテナチューナー ON/OFF 切り替え (既存メソッド) ---
         private async void BtnTuner_Click(object sender, RoutedEventArgs e)
         {
             if (_driver == null || !_driver.IsOpen) return;
-
             bool targetTuner = !_isTunerActive;
             try
             {
                 await Task.Run(() => _driver.SetTuner(targetTuner));
                 _isTunerActive = targetTuner;
                 UpdateTunerUi(_isTunerActive);
-                AppendLog(targetTuner ? "アンテナチューナ ON" : "アンテナチューナ OFF");
+                AppendLog(targetTuner ? "アンテナチューナー ON" : "アンテナチューナー OFF");
             }
             catch (Exception ex)
             {
-                AppendLog($"[チューナ制御エラー]: {ex.Message}");
+                AppendLog($"[チューナー設定エラー]: {ex.Message}");
+            }
+        }
+
+        // --- チューニング開始 (Tune Start) ボタンのクリックハンドラ (新規追加) ---
+        private async void BtnTuneStart_Click(object sender, RoutedEventArgs e)
+        {
+            if (_driver == null || !_driver.IsOpen) return;
+
+            try
+            {
+                // UI を一時的に動作中表示へ変更
+                BtnTuneStart.Content = "TUNING";
+                BtnTuneStart.Background = new SolidColorBrush(Color.FromRgb(245, 158, 11)); // Amber-500
+                BtnTuneStart.Foreground = new SolidColorBrush(Color.FromRgb(255, 255, 255));
+                AppendLog("[ATU] チューニング開始コマンドを送信しました");
+
+                // バックグラウンドでチューニング開始コマンドを実行
+                await Task.Run(() => _driver.StartTuning());
+
+                // 2秒後にボタン表示を通常状態に戻す
+                await Task.Delay(2000);
+                BtnTuneStart.Content = "TUNE";
+                BtnTuneStart.Background = new SolidColorBrush(Color.FromRgb(248, 250, 252));
+                BtnTuneStart.Foreground = new SolidColorBrush(Color.FromRgb(217, 119, 6));
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[ATU エラー]: {ex.Message}");
+                BtnTuneStart.Content = "TUNE";
+                BtnTuneStart.Background = new SolidColorBrush(Color.FromRgb(248, 250, 252));
+                BtnTuneStart.Foreground = new SolidColorBrush(Color.FromRgb(217, 119, 6));
             }
         }
 

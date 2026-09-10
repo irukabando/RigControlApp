@@ -5,7 +5,9 @@ using System.Threading;
 namespace RigControlApp
 {
     /// <summary>
-    /// Icom CI-V ドライバ (IC-7610, IC-7300, IC-705 など)
+    /// Icom CI-V ドライバ (IC-7100, IC-7300, IC-7610, IC-705 共通)
+    /// ini ファイル ([COMMANDS], [METERS]) の設定値を最優先で解釈して動作します。
+    /// ハードコードされたコマンド判定を廃止し、ini のキーから動的にバイト列を生成・照合します。
     /// </summary>
     public class IcomCivDriver : RigDriverBase
     {
@@ -13,15 +15,33 @@ namespace RigControlApp
 
         private const byte Preamble = 0xFE;
         private const byte EndByte = 0xFD;
-        private const byte NakByte = 0xFA; // CI-V NG/エラー応答
+        private const byte NakByte = 0xFA; // CI-V NG/エラー
 
         public IcomCivDriver(RigConfig config) : base(config) { }
 
         /// <summary>
-        /// CI-V フレーム送信 (FE FE [RigAddr] [CtrlAddr] [Payload...] FD)
-        /// 受信時に NAK (0xFA) を検出した場合はログ出力
+        /// ini ファイルの 16進数文字列（例: "1C 01 02" や "15 02"）を byte 配列にパースします。
         /// </summary>
-        private List<byte> SendFrame(byte[] payload, bool expectReply = true)
+        public static byte[] ParseHexToBytes(string hexStr)
+        {
+            if (string.IsNullOrWhiteSpace(hexStr)) return Array.Empty<byte>();
+            var parts = hexStr.Split(new[] { ' ', ',', '-', ';' }, StringSplitOptions.RemoveEmptyEntries);
+            var bytes = new List<byte>();
+            foreach (var p in parts)
+            {
+                if (byte.TryParse(p, System.Globalization.NumberStyles.HexNumber, null, out byte b))
+                {
+                    bytes.Add(b);
+                }
+            }
+            return bytes.ToArray();
+        }
+
+        /// <summary>
+        /// CI-V フレームを送信し、要求したコマンド・サブコマンドに合致する応答フレームを厳密に受信します。
+        /// 自身が送信したエコーバックや、無線機から自発的に送出されるトランシーブフレームは安全にスキップします。
+        /// </summary>
+        private List<byte> SendFrame(byte[] payload, bool expectReply = true, byte[]? expectedMatchPrefix = null)
         {
             lock (SyncLock)
             {
@@ -31,9 +51,12 @@ namespace RigControlApp
                 var frame = new List<byte> { Preamble, Preamble, Config.CivRigAddress, Config.CivControllerAddress };
                 frame.AddRange(payload);
                 frame.Add(EndByte);
-
                 Port.Write(frame.ToArray(), 0, frame.Count);
+
                 if (!expectReply) return new List<byte>();
+
+                // 期待する応答プレフィックス (指定がなければ payload 全体または主要部)
+                byte[] matchPrefix = expectedMatchPrefix ?? payload;
 
                 var received = new List<byte>();
                 var startTime = DateTime.Now;
@@ -47,22 +70,40 @@ namespace RigControlApp
 
                         if (b == EndByte && received.Count >= 6)
                         {
+                            // 受信バッファ内をスキャンして正規の応答フレームを探す
                             for (int i = 0; i <= received.Count - 6; i++)
                             {
                                 if (received[i] == Preamble && received[i + 1] == Preamble &&
-                                    received[i + 2] == Config.CivControllerAddress &&
-                                    received[i + 3] == Config.CivRigAddress)
+                                    received[i + 2] == Config.CivControllerAddress && // コントローラー宛て
+                                    received[i + 3] == Config.CivRigAddress)         // 無線機発
                                 {
                                     int endIdx = received.IndexOf(EndByte, i + 4);
                                     if (endIdx != -1)
                                     {
                                         var reply = received.GetRange(i, endIdx - i + 1);
-                                        // CI-V NAK (0xFA) 検出
+
+                                        // NAK (0xFA) 応答の場合
                                         if (reply.Count >= 6 && reply[4] == NakByte)
                                         {
-                                            Console.WriteLine($"[CI-V Error] 応答 NAK(0xFA) 送信={BitConverter.ToString(payload)}");
+                                            Console.WriteLine($"[CI-V NAK Error] 送信={BitConverter.ToString(payload)}");
+                                            return reply;
                                         }
-                                        return reply;
+
+                                        // 要求したコマンドプレフィックスと一致するか確認
+                                        bool isMatch = true;
+                                        for (int m = 0; m < matchPrefix.Length; m++)
+                                        {
+                                            if (4 + m >= reply.Count || reply[4 + m] != matchPrefix[m])
+                                            {
+                                                isMatch = false;
+                                                break;
+                                            }
+                                        }
+
+                                        if (isMatch)
+                                        {
+                                            return reply;
+                                        }
                                     }
                                 }
                             }
@@ -79,26 +120,39 @@ namespace RigControlApp
 
         public override long GetFrequency(VfoType vfo)
         {
-            var reply = SendFrame(new byte[] { 0x03 });
+            string key = vfo == VfoType.VfoA ? "FA_GET" : "FB_GET";
+            string hexCmd = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("FREQ_GET", "03"));
+            byte[] payload = ParseHexToBytes(hexCmd);
+
+            var reply = SendFrame(payload, expectReply: true, expectedMatchPrefix: payload);
             return ParseFreqFromCivFrame(reply);
         }
 
         public override void SetFrequency(VfoType vfo, long freqHz)
         {
+            string key = vfo == VfoType.VfoA ? "FA_SET" : "FB_SET";
+            string hexCmd = Config.Commands.GetValueOrDefault(key, "05");
+            byte[] cmdBytes = ParseHexToBytes(hexCmd);
             byte[] bcd = FreqToBcd5(freqHz);
-            var payload = new byte[1 + bcd.Length];
-            payload[0] = 0x05;
-            Array.Copy(bcd, 0, payload, 1, bcd.Length);
+
+            var payload = new byte[cmdBytes.Length + bcd.Length];
+            Array.Copy(cmdBytes, 0, payload, 0, cmdBytes.Length);
+            Array.Copy(bcd, 0, payload, cmdBytes.Length, bcd.Length);
+
             SendFrame(payload, expectReply: false);
         }
 
         public override string GetMode(VfoType vfo)
         {
-            var reply = SendFrame(new byte[] { 0x04 });
+            string key = vfo == VfoType.VfoA ? "MD_GET_A" : "MD_GET_B";
+            string hexCmd = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("MD_GET", "04"));
+            byte[] payload = ParseHexToBytes(hexCmd);
+
+            var reply = SendFrame(payload, expectReply: true, expectedMatchPrefix: payload);
             if (reply.Count >= 6)
             {
-                int cmdIdx = 4;
-                if (reply[cmdIdx] == 0x04 && reply.Count > cmdIdx + 1)
+                int cmdIdx = 4; // CMD (04)
+                if (reply.Count > cmdIdx + 1)
                 {
                     byte modeByte = reply[cmdIdx + 1];
                     string hex = modeByte.ToString("X2");
@@ -120,7 +174,7 @@ namespace RigControlApp
             if (Config.ModeMap.TryGetValue(modeName, out var codeHex))
             {
                 string key = vfo == VfoType.VfoA ? "MD_SET_A" : "MD_SET_B";
-                string defaultHex = "06 {0} 01";
+                string defaultHex = "06 {0}";
                 string tmpl = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("MD_SET", defaultHex));
                 string formatted = string.Format(tmpl, codeHex);
                 SendRawCommand(formatted);
@@ -141,10 +195,8 @@ namespace RigControlApp
             {
                 string key = vfo == VfoType.VfoA ? "BAND_SET_A" : "BAND_SET_B";
                 string tmpl = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("BAND_SET", "01 {0}"));
-
                 if (!string.IsNullOrEmpty(tmpl))
                 {
-                    // CI-V バンドスタック切替 (01 [BandCode])
                     SendRawCommand(string.Format(tmpl, bandVal));
                 }
                 else if (long.TryParse(bandVal, out long freqHz))
@@ -160,19 +212,24 @@ namespace RigControlApp
 
         public override string GetAntenna(VfoType vfo)
         {
-            // CI-V アンテナ設定読み出し (0x12)
-            var reply = SendFrame(new byte[] { 0x12 });
-            // 例: [FE FE TO FROM 12 (ANT) ...]
+            string key = vfo == VfoType.VfoA ? "ANT_GET_A" : "ANT_GET_B";
+            string? cmd = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("ANT_GET", null));
+            if (string.IsNullOrWhiteSpace(cmd) || cmd.Equals("NONE", StringComparison.OrdinalIgnoreCase))
+            {
+                return "1"; // IC-7100 など端子切替コマンド非対応機は "1" を固定返却
+            }
+
+            byte[] payload = ParseHexToBytes(cmd);
+            var reply = SendFrame(payload, expectReply: true, expectedMatchPrefix: payload);
             if (reply.Count >= 6)
             {
-                int cmdIdx = 4;
-                if (reply[cmdIdx] == 0x12 && reply.Count > cmdIdx + 1)
+                int dataIdx = 4 + payload.Length;
+                if (dataIdx < reply.Count)
                 {
-                    byte antByte = reply[cmdIdx + 1];
-                    string codeHex = antByte.ToString("X2"); // "00", "01", ...
-                    string codeDec = antByte.ToString();     // "0", "1", ...
+                    byte antByte = reply[dataIdx];
+                    string codeHex = antByte.ToString("X2");
+                    string codeDec = antByte.ToString();
 
-                    // [ANTENNAS] から設定値を検索 (例: 1=0 または ANT_1=00)
                     foreach (var kvp in Config.Antennas)
                     {
                         if (kvp.Value.Equals(codeHex, StringComparison.OrdinalIgnoreCase) ||
@@ -184,59 +241,89 @@ namespace RigControlApp
                                 : kvp.Key;
                         }
                     }
-                    // 設定がない場合は 0-based (0x00) を 1-based ("1", "2"...) に変換
                     return (antByte + 1).ToString();
                 }
             }
-            return string.Empty;
+            return "1";
         }
 
         public override void SetAntenna(VfoType vfo, string antennaIndex)
         {
-            string antCode = Config.Antennas.GetValueOrDefault(antennaIndex, antennaIndex);
             string key = vfo == VfoType.VfoA ? "ANT_SET_A" : "ANT_SET_B";
-            string tmpl = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("ANT_SET", "12 0{0}"));
+            string? tmpl = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("ANT_SET", null));
+            if (string.IsNullOrWhiteSpace(tmpl) || tmpl.Equals("NONE", StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            string antCode = Config.Antennas.GetValueOrDefault(antennaIndex, antennaIndex);
             SendRawCommand(string.Format(tmpl, antCode));
         }
 
         public override void SetPtt(bool txOn)
         {
-            byte state = (byte)(txOn ? 0x01 : 0x00);
-            SendFrame(new byte[] { 0x1C, 0x00, state }, expectReply: false);
+            string key = txOn ? "TX_ON" : "TX_OFF";
+            string defaultHex = txOn ? "1C 00 01" : "1C 00 00";
+            string hex = Config.Commands.GetValueOrDefault(key, defaultHex);
+            byte[] payload = ParseHexToBytes(hex);
+            SendFrame(payload, expectReply: false);
         }
 
         public override bool GetPtt()
         {
-            var reply = SendFrame(new byte[] { 0x1C, 0x00 });
-            if (reply.Count >= 7 && reply[4] == 0x1C && reply[5] == 0x00)
+            string hex = Config.Commands.GetValueOrDefault("TX_GET", "1C 00");
+            byte[] payload = ParseHexToBytes(hex);
+
+            var reply = SendFrame(payload, expectReply: true, expectedMatchPrefix: payload);
+            int valIdx = 4 + payload.Length;
+            if (reply.Count > valIdx)
             {
-                return reply[6] == 0x01;
+                return reply[valIdx] == 0x01;
             }
             return false;
         }
 
         public override bool GetTuner()
         {
-            var reply = SendFrame(new byte[] { 0x1C, 0x01 });
-            if (reply.Count >= 7 && reply[4] == 0x1C && reply[5] == 0x01)
+            string hex = Config.Commands.GetValueOrDefault("TUNER_GET", "1C 01");
+            byte[] payload = ParseHexToBytes(hex);
+
+            var reply = SendFrame(payload, expectReply: true, expectedMatchPrefix: payload);
+            int valIdx = 4 + payload.Length;
+            if (reply.Count > valIdx)
             {
-                return reply[6] == 0x01 || reply[6] == 0x02;
+                return reply[valIdx] == 0x01 || reply[valIdx] == 0x02;
             }
             return false;
         }
 
         public override void SetTuner(bool tunerOn)
         {
-            byte state = (byte)(tunerOn ? 0x01 : 0x00);
-            SendFrame(new byte[] { 0x1C, 0x01, state }, expectReply: false);
+            string key = tunerOn ? "TUNER_ON" : "TUNER_OFF";
+            string defaultHex = tunerOn ? "1C 01 01" : "1C 01 00";
+            string hex = Config.Commands.GetValueOrDefault(key, defaultHex);
+            byte[] payload = ParseHexToBytes(hex);
+            SendFrame(payload, expectReply: false);
+        }
+
+        public override void StartTuning()
+        {
+            string hex = Config.Commands.GetValueOrDefault("TUNER_START", "1C 01 02");
+            byte[] payload = ParseHexToBytes(hex);
+            SendFrame(payload, expectReply: false);
         }
 
         public override string GetBandwidth(VfoType vfo)
         {
-            var reply = SendFrame(new byte[] { 0x1A, 0x03 });
-            if (reply.Count >= 7 && reply[4] == 0x1A && reply[5] == 0x03)
+            string key = vfo == VfoType.VfoA ? "BW_GET_A" : "BW_GET_B";
+            string hex = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("BW_GET", "1A 03"));
+            byte[] payload = ParseHexToBytes(hex);
+
+            var reply = SendFrame(payload, expectReply: true, expectedMatchPrefix: payload);
+            int valIdx = 4 + payload.Length;
+            if (reply.Count > valIdx)
             {
-                int bw = BcdByteToInt(reply[6]) * 50;
+                int bw = BcdByteToInt(reply[valIdx]) * 50;
                 string code = bw.ToString();
                 foreach (var kvp in Config.Filters)
                 {
@@ -254,15 +341,19 @@ namespace RigControlApp
         public override void SetBandwidth(VfoType vfo, string bandwidthKey)
         {
             string bwVal = Config.Filters.GetValueOrDefault(bandwidthKey, bandwidthKey);
+            string key = vfo == VfoType.VfoA ? "BW_SET_A" : "BW_SET_B";
+            string tmpl = Config.Commands.GetValueOrDefault(key, Config.Commands.GetValueOrDefault("BW_SET", "1A 03 {0}"));
+
             if (int.TryParse(bwVal, out int hz))
             {
                 int val = hz / 50;
                 byte b = IntToBcdByte(val);
-                SendFrame(new byte[] { 0x1A, 0x03, b }, expectReply: false);
+                string hexByte = b.ToString("X2");
+                SendRawCommand(string.Format(tmpl, hexByte));
             }
             else
             {
-                SendRawCommand(bwVal);
+                SendRawCommand(string.Format(tmpl, bwVal));
             }
         }
 
@@ -273,69 +364,40 @@ namespace RigControlApp
             return $"[CI-V State] Freq: {freq:N0} Hz, Mode: {mode}";
         }
 
-        public override int GetSMeter()
+        private int ReadCivMeterFromConfig(string cmdKey, string defaultHex, string meterMaxConfigKey)
         {
-            var reply = SendFrame(new byte[] { 0x15, 0x02 });
-            if (reply.Count >= 8)
+            string hex = Config.Commands.GetValueOrDefault(cmdKey, defaultHex);
+            byte[] payload = ParseHexToBytes(hex);
+
+            var reply = SendFrame(payload, expectReply: true, expectedMatchPrefix: payload);
+            int valIdx = 4 + payload.Length;
+            if (reply.Count >= valIdx + 2)
             {
-                int val1 = BcdByteToInt(reply[6]);
-                int val2 = BcdByteToInt(reply[7]);
+                int val1 = BcdByteToInt(reply[valIdx]);
+                int val2 = BcdByteToInt(reply[valIdx + 1]);
                 int raw = val1 * 100 + val2;
-                int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("SMeter", "255"), out int max) ? max : 255;
+                int maxVal = Config.GetMeterMaxValue(meterMaxConfigKey, 255);
                 return NormalizeMeterValue(raw, maxVal);
             }
             return 0;
         }
 
-        public override int GetPowerMeter()
-        {
-            var reply = SendFrame(new byte[] { 0x15, 0x11 });
-            if (reply.Count >= 8)
-            {
-                int val1 = BcdByteToInt(reply[6]);
-                int val2 = BcdByteToInt(reply[7]);
-                int raw = val1 * 100 + val2;
-                int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("PowerMeter", "255"), out int max) ? max : 255;
-                return NormalizeMeterValue(raw, maxVal);
-            }
-            return 0;
-        }
-
-        public override int GetSwrMeter()
-        {
-            var reply = SendFrame(new byte[] { 0x15, 0x12 });
-            if (reply.Count >= 8)
-            {
-                int val1 = BcdByteToInt(reply[6]);
-                int val2 = BcdByteToInt(reply[7]);
-                int raw = val1 * 100 + val2;
-                int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("SwrMeter", "255"), out int max) ? max : 255;
-                return NormalizeMeterValue(raw, maxVal);
-            }
-            return 0;
-        }
-
-        public override int GetAlcMeter()
-        {
-            var reply = SendFrame(new byte[] { 0x15, 0x13 });
-            if (reply.Count >= 8)
-            {
-                int val1 = BcdByteToInt(reply[6]);
-                int val2 = BcdByteToInt(reply[7]);
-                int raw = val1 * 100 + val2;
-                int maxVal = int.TryParse(Config.Meters.GetValueOrDefault("AlcMeter", "255"), out int max) ? max : 255;
-                return NormalizeMeterValue(raw, maxVal);
-            }
-            return 0;
-        }
+        public override int GetSMeter() => ReadCivMeterFromConfig("SM_GET", "15 02", "SMeter");
+        public override int GetPowerMeter() => ReadCivMeterFromConfig("PO_GET", "15 11", "PowerMeter");
+        public override int GetSwrMeter() => ReadCivMeterFromConfig("SWR_GET", "15 12", "SwrMeter");
+        public override int GetAlcMeter() => ReadCivMeterFromConfig("ALC_GET", "15 13", "AlcMeter");
 
         public override int GetAfGain()
         {
-            var reply = SendFrame(new byte[] { 0x14, 0x01 });
-            if (reply.Count >= 8)
+            string hex = Config.Commands.GetValueOrDefault("AG_GET", "14 01");
+            byte[] payload = ParseHexToBytes(hex);
+
+            var reply = SendFrame(payload, expectReply: true, expectedMatchPrefix: payload);
+            int valIdx = 4 + payload.Length;
+            if (reply.Count >= valIdx + 2)
             {
-                int val1 = BcdByteToInt(reply[6]);
-                int val2 = BcdByteToInt(reply[7]);
+                int val1 = BcdByteToInt(reply[valIdx]);
+                int val2 = BcdByteToInt(reply[valIdx + 1]);
                 return val1 * 100 + val2;
             }
             return 0;
@@ -346,18 +408,22 @@ namespace RigControlApp
             gainValue = Math.Clamp(gainValue, 0, 255);
             byte b1 = IntToBcdByte(gainValue / 100);
             byte b2 = IntToBcdByte(gainValue % 100);
-            SendFrame(new byte[] { 0x14, 0x01, b1, b2 }, expectReply: false);
+
+            string hex = Config.Commands.GetValueOrDefault("AG_SET", "14 01");
+            byte[] prefix = ParseHexToBytes(hex);
+
+            var payload = new byte[prefix.Length + 2];
+            Array.Copy(prefix, 0, payload, 0, prefix.Length);
+            payload[^2] = b1;
+            payload[^1] = b2;
+
+            SendFrame(payload, expectReply: false);
         }
 
         public override string SendRawCommand(string rawHex)
         {
-            var parts = rawHex.Split(new[] { ' ', ',', '-', ';' }, StringSplitOptions.RemoveEmptyEntries);
-            var bytes = new List<byte>();
-            foreach (var p in parts)
-            {
-                bytes.Add(Convert.ToByte(p, 16));
-            }
-            var reply = SendFrame(bytes.ToArray());
+            byte[] bytes = ParseHexToBytes(rawHex);
+            var reply = SendFrame(bytes);
             return BitConverter.ToString(reply.ToArray());
         }
 

@@ -11,10 +11,10 @@ namespace RigControlApp
     public enum ProtocolType
     {
         Kenwood,        // Kenwood ASCII CAT (TS-590, TS-890, TS-990 など)
-        Yaesu,          // Yaesu 新型 ASCII CAT (FTDX101, FT-991A, FTDX10, FT-710 など)
+        Yaesu,          // Yaesu 新型 ASCII CAT (FTDX9000, FTDX101, FT-991A, FTDX10, FT-710 など)
         Ascii,          // 汎用 ASCII CAT
         Civ,            // Icom CI-V バイナリ (0xFE 0xFE ...)
-        YaesuBinary     // Yaesu 5バイト Binary CAT (FT-1000, FT-1000MP など)
+        YaesuBinary     // Yaesu 5バイト Binary CAT (FT-1000, FT-1000MP, Mark-V など)
     }
 
     /// <summary>
@@ -37,7 +37,7 @@ namespace RigControlApp
         public ProtocolType Protocol { get; set; } = ProtocolType.Kenwood;
         public char Terminator { get; set; } = ';';
         public int FreqDigits { get; set; } = 11;
-        public byte CivRigAddress { get; set; } = 0x94;
+        public byte CivRigAddress { get; set; } = 0x88; // IC-7100 デフォルト
         public byte CivControllerAddress { get; set; } = 0xE0;
         public int PollIntervalMs { get; set; } = 500;
 
@@ -48,6 +48,39 @@ namespace RigControlApp
         public Dictionary<string, string> Bands { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> Antennas { get; } = new(StringComparer.OrdinalIgnoreCase);
         public Dictionary<string, string> Filters { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// [METERS] セクションからメーター最大値を取得するヘルパーメソッド。
+        /// "SMeter", "SMeterMax", "PowerMeter", "PowerMeterMax" 等の表記ゆれを吸収して確実に読み込みます。
+        /// </summary>
+        public int GetMeterMaxValue(string meterKey, int defaultValue)
+        {
+            // 1. 指定キーそのままで検索 (例: SMeterMax または SMeter)
+            if (Meters.TryGetValue(meterKey, out var valStr) && int.TryParse(valStr, out int val1))
+            {
+                return val1;
+            }
+
+            // 2. "Max" を付加して検索 (例: SMeter -> SMeterMax)
+            if (!meterKey.EndsWith("Max", StringComparison.OrdinalIgnoreCase))
+            {
+                if (Meters.TryGetValue(meterKey + "Max", out var valMaxStr) && int.TryParse(valMaxStr, out int val2))
+                {
+                    return val2;
+                }
+            }
+            else
+            {
+                // 3. "Max" を除去して検索 (例: SMeterMax -> SMeter)
+                string stripped = meterKey[..^3];
+                if (Meters.TryGetValue(stripped, out var valStripStr) && int.TryParse(valStripStr, out int val3))
+                {
+                    return val3;
+                }
+            }
+
+            return defaultValue;
+        }
 
         /// <summary>
         /// .ini ファイルから設定をロード
