@@ -22,9 +22,9 @@ namespace RigControlApp
     /// </summary>
     public class RigConfig
     {
-        // --- シリアル通信設定 ---
-        public string PortName { get; set; } = "COM3";
-        public int BaudRate { get; set; } = 38400;
+        // [SERIAL] シリアル通信設定
+        public string PortName { get; set; } = "COM1";
+        public int BaudRate { get; set; } = 9600;
         public int DataBits { get; set; } = 8;
         public Parity Parity { get; set; } = Parity.None;
         public StopBits StopBits { get; set; } = StopBits.One;
@@ -33,52 +33,42 @@ namespace RigControlApp
         public int ReadTimeoutMs { get; set; } = 1000;
         public int WriteTimeoutMs { get; set; } = 1000;
 
-        // --- プロトコル共通設定 ---
+        // [PROTOCOL] プロトコル共通設定
         public ProtocolType Protocol { get; set; } = ProtocolType.Kenwood;
         public char Terminator { get; set; } = ';';
         public int FreqDigits { get; set; } = 11;
+        public int PollIntervalMs { get; set; } = 500;
         public byte CivRigAddress { get; set; } = 0x88; // IC-7100 デフォルト
         public byte CivControllerAddress { get; set; } = 0xE0;
-        public int PollIntervalMs { get; set; } = 500;
 
-        // --- マップ設定 (.ini から動的読み込み) ---
-        public Dictionary<string, string> Meters { get; } = new(StringComparer.OrdinalIgnoreCase);
+        // [COMMANDS]
         public Dictionary<string, string> Commands { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        // [MODES]
         public Dictionary<string, string> ModeMap { get; } = new(StringComparer.OrdinalIgnoreCase);
-        public Dictionary<string, string> Bands { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        // [ANTENNAS]
         public Dictionary<string, string> Antennas { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        // [BANDS]
+        public Dictionary<string, string> Bands { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        // [FILTERS]
         public Dictionary<string, string> Filters { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+        // [METERS]
+        public Dictionary<string, int> MeterMaxValues { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+        // [RIG]
         /// <summary>
-        /// [METERS] セクションからメーター最大値を取得するヘルパーメソッド。
-        /// "SMeter", "SMeterMax", "PowerMeter", "PowerMeterMax" 等の表記ゆれを吸収して確実に読み込みます。
+        /// リグごとの送信出力パラメータ最大値 (Kenwood: 100/200, Yaesu/Icom: 255 など)。0 の場合は出力制御非対応。
         /// </summary>
-        public int GetMeterMaxValue(string meterKey, int defaultValue)
+        public int PowerMax { get; set; } = 100;
+
+        public int GetMeterMaxValue(string key, int defaultValue)
         {
-            // 1. 指定キーそのままで検索 (例: SMeterMax または SMeter)
-            if (Meters.TryGetValue(meterKey, out var valStr) && int.TryParse(valStr, out int val1))
-            {
-                return val1;
-            }
-
-            // 2. "Max" を付加して検索 (例: SMeter -> SMeterMax)
-            if (!meterKey.EndsWith("Max", StringComparison.OrdinalIgnoreCase))
-            {
-                if (Meters.TryGetValue(meterKey + "Max", out var valMaxStr) && int.TryParse(valMaxStr, out int val2))
-                {
-                    return val2;
-                }
-            }
-            else
-            {
-                // 3. "Max" を除去して検索 (例: SMeterMax -> SMeter)
-                string stripped = meterKey[..^3];
-                if (Meters.TryGetValue(stripped, out var valStripStr) && int.TryParse(valStripStr, out int val3))
-                {
-                    return val3;
-                }
-            }
-
+            if (MeterMaxValues.TryGetValue(key, out int val)) return val;
+            if (MeterMaxValues.TryGetValue(key + "Max", out int valMax)) return valMax;
             return defaultValue;
         }
 
@@ -87,54 +77,22 @@ namespace RigControlApp
         /// </summary>
         public static RigConfig LoadFromFile(string filePath)
         {
-            // 設定ファイルの検索
+            var config = new RigConfig();
             if (!File.Exists(filePath))
             {
-                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
-                string fileNameOnly = Path.GetFileName(filePath);
-                string fileNameWithoutExt = Path.GetFileNameWithoutExtension(filePath);
-                string withExt = filePath.EndsWith(".ini", StringComparison.OrdinalIgnoreCase) ? filePath : filePath + ".ini";
-
-                string[] candidates = new[]
-                {
-                    withExt,
-                    Path.Combine(baseDir, filePath),
-                    Path.Combine(baseDir, withExt),
-                    Path.Combine(baseDir, "config", fileNameOnly),
-                    Path.Combine(baseDir, "config", fileNameWithoutExt + ".ini"),
-                    Path.Combine("config", fileNameOnly),
-                    Path.Combine("config", fileNameWithoutExt + ".ini"),
-                    Path.Combine(baseDir, "config.ini"),
-                    Path.Combine(baseDir, "config", "config.ini")
-                };
-
-                bool found = false;
-                foreach (var cand in candidates)
-                {
-                    if (File.Exists(cand))
-                    {
-                        filePath = cand;
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (!found)
-                {
-                    throw new FileNotFoundException($"設定ファイルが見つかりません: {filePath}\n探索先: {baseDir}");
-                }
+                return config;
             }
 
-            var config = new RigConfig();
             string currentSection = "";
+            var lines = File.ReadAllLines(filePath);
 
-            foreach (var rawLine in File.ReadAllLines(filePath))
+            foreach (var rawLine in lines)
             {
                 string line = rawLine.Trim();
-
-                // コメント・空行スキップ (#, ;)
-                if (string.IsNullOrEmpty(line) || line.StartsWith("#") || line.StartsWith(";"))
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#") || line.StartsWith(";"))
+                {
                     continue;
+                }
 
                 // セクションヘッダ
                 if (line.StartsWith("[") && line.EndsWith("]"))
@@ -145,7 +103,7 @@ namespace RigControlApp
 
                 // キー = 値 のパース
                 int eqIdx = line.IndexOf('=');
-                if (eqIdx <= 0) continue;
+                if (eqIdx < 0) continue;
 
                 string key = line[..eqIdx].Trim();
                 string val = line[(eqIdx + 1)..].Trim();
@@ -160,106 +118,78 @@ namespace RigControlApp
                 switch (currentSection)
                 {
                     case "SERIAL":
-                        ParseSerialConfig(config, key, val);
+                        switch (key.ToLowerInvariant())
+                        {
+                            case "portname": config.PortName = val; break;
+                            case "baudrate": if (int.TryParse(val, out int br)) config.BaudRate = br; break;
+                            case "databits": if (int.TryParse(val, out int db)) config.DataBits = db; break;
+                            case "parity": if (Enum.TryParse<Parity>(val, true, out var p)) config.Parity = p; break;
+                            case "stopbits": if (Enum.TryParse<StopBits>(val, true, out var sb)) config.StopBits = sb; break;
+                            case "dtrenable": if (bool.TryParse(val, out bool dtr)) config.DtrEnable = dtr; break;
+                            case "rtsenable": if (bool.TryParse(val, out bool rts)) config.RtsEnable = rts; break;
+                            case "readtimeoutms": if (int.TryParse(val, out int rt)) config.ReadTimeoutMs = rt; break;
+                            case "writetimeoutms": if (int.TryParse(val, out int wt)) config.WriteTimeoutMs = wt; break;
+                        }
                         break;
+
                     case "PROTOCOL":
-                        ParseProtocolConfig(config, key, val);
+                        switch (key.ToLowerInvariant())
+                        {
+                            case "type": if (Enum.TryParse<ProtocolType>(val, true, out var proto)) config.Protocol = proto; break;
+                            case "terminator": if (!string.IsNullOrEmpty(val)) config.Terminator = val[0]; break;
+                            case "freqdigits": if (int.TryParse(val, out int fd)) config.FreqDigits = fd; break;
+                            case "pollintervalms": if (int.TryParse(val, out int pi)) config.PollIntervalMs = pi; break;
+                            case "civrigaddress":
+                                if (byte.TryParse(val.Replace("0x", ""), System.Globalization.NumberStyles.HexNumber, null, out byte ra))
+                                    config.CivRigAddress = ra;
+                                break;
+                            case "civcontrolleraddress":
+                                if (byte.TryParse(val.Replace("0x", ""), System.Globalization.NumberStyles.HexNumber, null, out byte ca))
+                                    config.CivControllerAddress = ca;
+                                break;
+                        }
                         break;
-                    case "METERS":
-                    case "METER":
-                        config.Meters[key] = val;
-                        break;
+
                     case "COMMANDS":
                         config.Commands[key] = val;
                         break;
+
                     case "MODES":
                         config.ModeMap[key] = val;
                         break;
-                    case "BANDS":
-                        config.Bands[key] = val;
-                        break;
+
                     case "ANTENNAS":
                         config.Antennas[key] = val;
                         break;
+
+                    case "BANDS":
+                        config.Bands[key] = val;
+                        break;
+
                     case "FILTERS":
-                    case "FILTER":
-                    case "BANDWIDTHS":
                         config.Filters[key] = val;
+                        break;
+
+                    case "METERS":
+                        if (int.TryParse(val, out int mVal))
+                        {
+                            config.MeterMaxValues[key] = mVal;
+                        }
+                        break;
+
+                    case "RIG":
+                        if (key.Equals("PowerMax", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (int.TryParse(val, out int pMax))
+                            {
+                                config.PowerMax = pMax;
+                            }
+                        }
                         break;
                 }
             }
 
             return config;
-        }
-
-        /// <summary>
-        /// [SERIAL] セクションのパース
-        /// </summary>
-        private static void ParseSerialConfig(RigConfig config, string key, string val)
-        {
-            if (key.Equals("PortName", StringComparison.OrdinalIgnoreCase)) config.PortName = val;
-            else if (key.Equals("BaudRate", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int br)) config.BaudRate = br;
-            else if (key.Equals("DataBits", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int db)) config.DataBits = db;
-            else if (key.Equals("Parity", StringComparison.OrdinalIgnoreCase) && Enum.TryParse<Parity>(val, true, out var par)) config.Parity = par;
-            else if (key.Equals("StopBits", StringComparison.OrdinalIgnoreCase) && Enum.TryParse<StopBits>(val, true, out var sb)) config.StopBits = sb;
-            else if (key.Equals("DtrEnable", StringComparison.OrdinalIgnoreCase) && bool.TryParse(val, out bool dtr)) config.DtrEnable = dtr;
-            else if (key.Equals("RtsEnable", StringComparison.OrdinalIgnoreCase) && bool.TryParse(val, out bool rts)) config.RtsEnable = rts;
-            else if (key.Equals("ReadTimeoutMs", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int rt)) config.ReadTimeoutMs = rt;
-            else if (key.Equals("WriteTimeoutMs", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int wt)) config.WriteTimeoutMs = wt;
-        }
-
-        /// <summary>
-        /// [PROTOCOL] セクションのパース
-        /// </summary>
-        private static void ParseProtocolConfig(RigConfig config, string key, string val)
-        {
-            if (key.Equals("Type", StringComparison.OrdinalIgnoreCase))
-            {
-                if (val.Equals("Kenwood", StringComparison.OrdinalIgnoreCase))
-                {
-                    config.Protocol = ProtocolType.Kenwood;
-                }
-                else if (val.Equals("Yaesu", StringComparison.OrdinalIgnoreCase))
-                {
-                    config.Protocol = ProtocolType.Yaesu;
-                }
-                else if (val.Equals("CIV", StringComparison.OrdinalIgnoreCase) || val.Equals("Icom", StringComparison.OrdinalIgnoreCase))
-                {
-                    config.Protocol = ProtocolType.Civ;
-                }
-                else if (val.Contains("YaesuBinary", StringComparison.OrdinalIgnoreCase) || val.Contains("Binary", StringComparison.OrdinalIgnoreCase))
-                {
-                    config.Protocol = ProtocolType.YaesuBinary;
-                }
-                else if (Enum.TryParse<ProtocolType>(val, true, out var proto))
-                {
-                    config.Protocol = proto;
-                }
-                else
-                {
-                    config.Protocol = ProtocolType.Ascii;
-                }
-            }
-            else if (key.Equals("Terminator", StringComparison.OrdinalIgnoreCase))
-            {
-                config.Terminator = val.Length > 0 ? val[0] : ';';
-            }
-            else if (key.Equals("FreqDigits", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int fd))
-            {
-                config.FreqDigits = fd;
-            }
-            else if (key.Equals("CivRigAddress", StringComparison.OrdinalIgnoreCase))
-            {
-                config.CivRigAddress = Convert.ToByte(val, 16);
-            }
-            else if (key.Equals("CivControllerAddress", StringComparison.OrdinalIgnoreCase))
-            {
-                config.CivControllerAddress = Convert.ToByte(val, 16);
-            }
-            else if (key.Equals("PollIntervalMs", StringComparison.OrdinalIgnoreCase) && int.TryParse(val, out int pi))
-            {
-                config.PollIntervalMs = Math.Max(50, pi);
-            }
         }
     }
 }

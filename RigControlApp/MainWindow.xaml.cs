@@ -33,6 +33,15 @@ namespace RigControlApp
         private bool _isTxActive = false;
         private bool _isTunerActive = false;
 
+        // 周波数巻き戻り防止調停フィールド
+        private long _pendingTargetFreq = 0;
+        private DateTime _lastFrequencySetTime = DateTime.MinValue;
+
+        // 送信出力 (RF Power) 制御用フィールド
+        private bool _isUserDraggingPower = false;
+        private bool _isUpdatingPowerUi = false;
+        private DateTime _lastPowerSetTime = DateTime.MinValue;
+
         private bool _isBusy = false;
         private bool _isUpdatingText = false;
         private bool _isUpdatingBand = false;
@@ -146,6 +155,17 @@ namespace RigControlApp
                 CmbBaudRate.Text = _config.BaudRate.ToString();
                 _pollTimer.Interval = TimeSpan.FromMilliseconds(_config.PollIntervalMs);
                 PopulateFilterList();
+
+                // 出力調整バーの有効/無効化
+                if (_config.PowerMax <= 0)
+                {
+                    BorderPowerControl.IsEnabled = false;
+                    TxtPowerPercent.Text = "N/A";
+                }
+                else
+                {
+                    BorderPowerControl.IsEnabled = true;
+                }
             }
             catch { }
         }
@@ -236,6 +256,17 @@ namespace RigControlApp
                 _driver = RigDriverFactory.Create(_config);
                 _driver.Open();
 
+                // 出力調整バーの制御対応判定
+                if (!_driver.SupportsPowerControl || _config.PowerMax <= 0)
+                {
+                    BorderPowerControl.IsEnabled = false;
+                    TxtPowerPercent.Text = "N/A";
+                }
+                else
+                {
+                    BorderPowerControl.IsEnabled = true;
+                }
+
                 BtnConnect.Content = "切断";
                 BtnConnect.Background = new SolidColorBrush(Color.FromRgb(180, 40, 40));
                 LedStatus.Fill = new SolidColorBrush(Color.FromRgb(34, 197, 94));
@@ -273,10 +304,12 @@ namespace RigControlApp
                 int power = 0;
                 int swr = 0;
                 int alc = 0;
+                int rfPowerRaw = 0;
                 bool isTx = false;
                 bool isTuner = false;
 
                 bool supportsDual = _driver.SupportsDualVfoRead;
+                bool supportsPowerCtrl = _driver.SupportsPowerControl && _config.PowerMax > 0;
                 var currentVfo = _activeVfo;
 
                 await Task.Run(() =>
@@ -307,18 +340,45 @@ namespace RigControlApp
                     {
                         try { smeter = _driver.GetSMeter(); } catch { }
                     }
+
+                    // 送信出力設定値の読み取り
+                    if (supportsPowerCtrl)
+                    {
+                        try { rfPowerRaw = _driver.GetRfPower(); } catch { }
+                    }
                 });
 
+                // 1. 周波数の反映 (巻き戻り防止調停ロジック)
                 if (freqMain > 0)
                 {
                     if (currentVfo == VfoType.VfoA) _vfoAFreq = freqMain;
                     else _vfoBFreq = freqMain;
 
-                    if (freqMain != _currentFreq)
+                    // ユーザー変更直後の抑制ウィンドウ内判定 (1500 ms)
+                    bool isWithinSuppressionWindow = (DateTime.UtcNow - _lastFrequencySetTime).TotalMilliseconds < 1500;
+                    if (isWithinSuppressionWindow)
                     {
-                        _currentFreq = freqMain;
-                        UpdateFrequencyDisplay(_currentFreq);
-                        UpdateBandSelection(_currentFreq);
+                        // リグ側が新しい目標周波数に正しく到達した場合は即座に抑制解除して反映
+                        if (freqMain == _pendingTargetFreq)
+                        {
+                            _lastFrequencySetTime = DateTime.MinValue;
+                            if (freqMain != _currentFreq)
+                            {
+                                _currentFreq = freqMain;
+                                UpdateFrequencyDisplay(_currentFreq);
+                                UpdateBandSelection(_currentFreq);
+                            }
+                        }
+                        // リグ側がまだ古い周波数を返している間は UI 上書きを破棄 (スキップ)
+                    }
+                    else
+                    {
+                        if (freqMain != _currentFreq)
+                        {
+                            _currentFreq = freqMain;
+                            UpdateFrequencyDisplay(_currentFreq);
+                            UpdateBandSelection(_currentFreq);
+                        }
                     }
                 }
 
@@ -374,7 +434,7 @@ namespace RigControlApp
                 }
                 else
                 {
-                    // 受信時は送信メーターを 0 にするか、必要に応じて前回値を保持
+                    // 受信時は送信メーターを 0 にする
                     PbPowerMeter.Value = 0;
                     PbSwrMeter.Value = 0;
                     PbAlcMeter.Value = 0;
@@ -391,6 +451,22 @@ namespace RigControlApp
                 {
                     _isTunerActive = isTuner;
                     UpdateTunerUi(_isTunerActive);
+                }
+
+                // 送信出力 (RF Power) の反映 (ユーザー操作中でなく、抑制ウィンドウ外の場合)
+                if (supportsPowerCtrl && !_isUserDraggingPower)
+                {
+                    bool isPowerSuppressed = (DateTime.UtcNow - _lastPowerSetTime).TotalMilliseconds < 800;
+                    if (!isPowerSuppressed && rfPowerRaw > 0)
+                    {
+                        int percent = (int)Math.Round((double)rfPowerRaw * 100.0 / _config.PowerMax);
+                        percent = Math.Clamp(percent, 0, 100);
+
+                        _isUpdatingPowerUi = true;
+                        SliderPower.Value = percent;
+                        TxtPowerPercent.Text = $"{percent}%";
+                        _isUpdatingPowerUi = false;
+                    }
                 }
 
                 // コンテスト用簡易バー画面が表示中であればリアルタイム通知
@@ -421,9 +497,11 @@ namespace RigControlApp
                 string mode = "";
                 string antenna = "";
                 string bandwidth = "";
+                int rfPowerRaw = 0;
                 bool isTx = false;
                 bool isTuner = false;
                 var vfo = _activeVfo;
+                bool supportsPowerCtrl = _driver.SupportsPowerControl && _config.PowerMax > 0;
 
                 await Task.Run(() =>
                 {
@@ -435,6 +513,10 @@ namespace RigControlApp
                         bandwidth = _driver.GetBandwidth(vfo);
                         isTx = _driver.GetPtt();
                         isTuner = _driver.GetTuner();
+                        if (supportsPowerCtrl)
+                        {
+                            try { rfPowerRaw = _driver.GetRfPower(); } catch { }
+                        }
                     }
                 });
 
@@ -480,6 +562,16 @@ namespace RigControlApp
 
                 _isTunerActive = isTuner;
                 UpdateTunerUi(_isTunerActive);
+
+                if (supportsPowerCtrl && rfPowerRaw > 0)
+                {
+                    int percent = (int)Math.Round((double)rfPowerRaw * 100.0 / _config.PowerMax);
+                    percent = Math.Clamp(percent, 0, 100);
+                    _isUpdatingPowerUi = true;
+                    SliderPower.Value = percent;
+                    TxtPowerPercent.Text = $"{percent}%";
+                    _isUpdatingPowerUi = false;
+                }
 
                 long subFreq = vfo == VfoType.VfoA ? _vfoBFreq : _vfoAFreq;
                 TxtFreqSub.Text = subFreq > 0 ? $"{FormatFrequency(subFreq)} Hz" : "---.---.--- Hz";
@@ -881,6 +973,10 @@ namespace RigControlApp
             if (_driver == null || !_driver.IsOpen) return;
             var targetVfo = _activeVfo;
 
+            // 楽観的UI更新と古いポーリング値の上書き抑制を設定
+            _pendingTargetFreq = freq;
+            _lastFrequencySetTime = DateTime.UtcNow;
+
             try
             {
                 await Task.Run(() =>
@@ -1076,6 +1172,58 @@ namespace RigControlApp
                 {
                     _isBusy = false;
                 }
+            }
+        }
+
+        // =========================================================================
+        // 送信出力 (RF Power) 制御イベントハンドラ (メイン画面専用)
+        // =========================================================================
+
+        private void SliderPower_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            _isUserDraggingPower = true;
+        }
+
+        private async void SliderPower_PreviewMouseUp(object sender, MouseButtonEventArgs e)
+        {
+            _isUserDraggingPower = false;
+            await ApplyPowerChangeAsync();
+        }
+
+        private async void SliderPower_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+        {
+            // XAML パース時（InitializeComponent 実行中）は TxtPowerPercent がまだ null のため処理を抜ける
+            if (_isUpdatingPowerUi || TxtPowerPercent == null) return;
+
+            int percent = (int)Math.Round(e.NewValue);
+            TxtPowerPercent.Text = $"{percent} %";
+
+            // マウスドラッグ中以外（クリックで直接値を移動した場合など）に即座に送信
+            // ウィンドウロード完了前（初期化中）の誤送信を防ぐため IsLoaded を確認
+            if (!_isUserDraggingPower && IsLoaded)
+            {
+                await ApplyPowerChangeAsync();
+            }
+        }
+
+        private async Task ApplyPowerChangeAsync()
+        {
+            if (_driver == null || !_driver.IsOpen || !_driver.SupportsPowerControl || _config.PowerMax <= 0) return;
+
+            int percent = (int)Math.Round(SliderPower.Value);
+            int rawPower = (int)Math.Round((double)percent * _config.PowerMax / 100.0);
+            rawPower = Math.Clamp(rawPower, 0, _config.PowerMax);
+
+            _lastPowerSetTime = DateTime.UtcNow;
+
+            try
+            {
+                await Task.Run(() => _driver.SetRfPower(rawPower));
+                AppendLog($"送信出力設定: {percent}% (Raw: {rawPower}/{_config.PowerMax})");
+            }
+            catch (Exception ex)
+            {
+                AppendLog($"[出力設定エラー]: {ex.Message}");
             }
         }
 

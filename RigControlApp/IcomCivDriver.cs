@@ -420,6 +420,37 @@ namespace RigControlApp
             SendFrame(payload, expectReply: false);
         }
 
+        /// <summary>
+        /// 送信出力 (RF Power) の読み出し (CI-V 14 0A コマンド)
+        /// </summary>
+        public override int GetRfPower()
+        {
+            string hex = Config.Commands.GetValueOrDefault("PC_GET", "14 0A");
+            byte[] payload = ParseHexToBytes(hex);
+
+            var reply = SendFrame(payload, expectReply: true, expectedMatchPrefix: payload);
+            int valIdx = 4 + payload.Length;
+            if (reply.Count >= valIdx + 2)
+            {
+                int val1 = BcdByteToInt(reply[valIdx]);
+                int val2 = BcdByteToInt(reply[valIdx + 1]);
+                return (val1 * 100) + val2;
+            }
+            return 0;
+        }
+
+        /// <summary>
+        /// 送信出力 (RF Power) の設定 (CI-V 14 0A [p1] [p2] コマンド, 0000〜0255)
+        /// </summary>
+        public override void SetRfPower(int rawPower)
+        {
+            int clamped = Math.Clamp(rawPower, 0, Math.Min(Config.PowerMax, 255));
+            string powerHex = $"{IntToBcdByte(clamped / 100):X2} {IntToBcdByte(clamped % 100):X2}";
+
+            string tmpl = Config.Commands.GetValueOrDefault("PC_SET", "14 0A {0}");
+            SendRawCommand(string.Format(tmpl, powerHex));
+        }
+
         public override string SendRawCommand(string rawHex)
         {
             byte[] bytes = ParseHexToBytes(rawHex);

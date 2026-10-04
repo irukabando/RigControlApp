@@ -47,6 +47,11 @@ namespace RigControlApp
         void SetAfGain(int gainValue);
         string SendRawCommand(string rawInput);
         void SelectMeter(string meterType);
+
+        // 送信出力制御 (RF Power)
+        int GetRfPower();
+        void SetRfPower(int rawPower);
+        bool SupportsPowerControl { get; }
     }
 
     /// <summary>
@@ -59,6 +64,7 @@ namespace RigControlApp
         protected readonly object SyncLock = new();
 
         public virtual bool SupportsDualVfoRead => false;
+        public virtual bool SupportsPowerControl => true;
         public abstract string GetAntenna(VfoType vfo);
 
         protected RigDriverBase(RigConfig config)
@@ -172,6 +178,10 @@ namespace RigControlApp
         public abstract void SetAfGain(int gainValue);
         public abstract string SendRawCommand(string rawInput);
         public virtual void SelectMeter(string meterType) { }
+
+        // 送信出力制御のデフォルト実装
+        public virtual int GetRfPower() => 0;
+        public virtual void SetRfPower(int rawPower) { }
     }
 
     /// <summary>

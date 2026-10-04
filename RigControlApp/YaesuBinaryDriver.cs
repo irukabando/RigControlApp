@@ -12,6 +12,8 @@ namespace RigControlApp
     public class YaesuBinaryDriver : RigDriverBase
     {
         public override bool SupportsDualVfoRead => true;
+        // FT-1000MP は CAT コマンドによる送信出力制御に非対応
+        public override bool SupportsPowerControl => false;
 
         private long _cachedFreqA = 14074000;
         private long _cachedFreqB = 14074000;
@@ -188,12 +190,12 @@ namespace RigControlApp
             if (vfo == VfoType.VfoA)
             {
                 _cachedFreqA = freqHz;
-                SendCommand(p1, p2, p3, p4, 0x0A);
+                SendCommand(p4, p3, p2, p1, 0x0A);
             }
             else
             {
                 _cachedFreqB = freqHz;
-                SendCommand(p1, p2, p3, p4, 0x8A);
+                SendCommand(p4, p3, p2, p1, 0x8A);
             }
         }
 
@@ -386,6 +388,10 @@ namespace RigControlApp
 
         public override int GetAfGain() => 0;
         public override void SetAfGain(int gainValue) { }
+
+        // 送信出力制御 (FT-1000MP は非対応のため No-op)
+        public override int GetRfPower() => 0;
+        public override void SetRfPower(int rawPower) { }
 
         public override string SendRawCommand(string raw)
         {

@@ -66,7 +66,7 @@ namespace RigControlApp
         }
 
         /// <summary>
-        /// 期待する応答プレフィックス（例: "FA", "MD0" など）を指定してコマンドを送受信します。
+        /// 期待する応答プレフィックス（例: "FA", "MD0", "PC" など）を指定してコマンドを送受信します。
         /// 無線機のAI機能による非同期通知や直前のゴミデータがバッファに混入した場合でも、
         /// 指定されたプレフィックスで始まる応答が届くまで読み進めて正しく抽出します。
         /// </summary>
@@ -251,6 +251,31 @@ namespace RigControlApp
             {
                 ExecuteCommand(cmd, expectResponse: false);
             }
+        }
+
+        /// <summary>
+        /// 送信出力 (RF Power) の読み出し (PC コマンド)
+        /// </summary>
+        public override int GetRfPower()
+        {
+            string cmd = Config.Commands.GetValueOrDefault("PC_GET", "PC;");
+            string resp = ExecuteCommandWithExpectedPrefix(cmd, "PC");
+            string data = StripCommandPrefix(resp, cmd);
+            if (int.TryParse(data, out int val))
+            {
+                return val;
+            }
+            return 0;
+        }
+
+        /// <summary>
+        /// 送信出力 (RF Power) の設定 (PC コマンド: PC000;〜PC255;)
+        /// </summary>
+        public override void SetRfPower(int rawPower)
+        {
+            string tmpl = Config.Commands.GetValueOrDefault("PC_SET", "PC{0:D3};");
+            string cmd = string.Format(tmpl, Math.Clamp(rawPower, 0, Config.PowerMax));
+            ExecuteCommand(cmd, expectResponse: false);
         }
     }
 }
